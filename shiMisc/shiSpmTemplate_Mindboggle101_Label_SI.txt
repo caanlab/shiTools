@@ -1,0 +1,4 @@
+Klein, A., & Tourville, J. (2012). 101 labeled brain images and a consistent human cortical labeling protocol. Frontiers in Neuroscience. 
+
+Mindboggle 101 (Klein 2012)
+The Mindboggle 101 dataset consists of 101 labeled brain images that have been manually labeled largely following the Desikan protocol. It also consists of a group-level parcellation atlas which has been included into Lead-DBS for connectomic analyses.

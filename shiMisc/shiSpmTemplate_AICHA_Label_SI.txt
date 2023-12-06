@@ -1,0 +1,10 @@
+AICHA: An atlas of intrinsic connectivity of homotopic areas (Joliot 2015)
+The AICHA atlas – a detailed cortical atlas based on functional connectivity in 281 subjects.
+
+How to obtain the atlas:
+
+The atlas comes preinstalled within Lead-DBS
+The AICHA atlas is described here
+Related citations:
+
+Joliot, M., Jobard, G., Naveau, M., Delcroix, N., Petit, L., Zago, L., et al. (2015). AICHA: An atlas of intrinsic connectivity of homotopic areas. Journal of Neuroscience Methods, 254, 46–59. http://doi.org/10.1016/j.jneumeth.2015.07.013

@@ -1,0 +1,10 @@
+Brainnetome Atlas parcellation (Fan 2016)
+The Brainnetome atlas is an in vivo map based on fMRI and dMRI, with more fine-grained functional brain subregions and detailed anatomical and functional connection patterns for each area. Currently, the Brainnetome atlas contains 246 subregions of the bilateral hemispheres.
+
+How to obtain the atlas:
+
+The atlas comes preinstalled within Lead-DBS
+You can get information about the atlas here
+Related citations:
+
+Lingzhong Fan, Hai Li, Junjie Zhuo, Yu Zhang, Jiaojian Wang, Liangfu Chen, Zhengyi Yang, Congying Chu, Sangma Xie, Angela R. Laird, Peter T. Fox, Simon B. Eickhoff, Chunshui Yu, Tianzi Jiang; The Human Brainnetome Atlas: A New Brain Atlas Based on Connectional Architecture, Cerebral Cortex, Volume 26, Issue 8, 1 August 2016, Pages 3508–3526, https://doi.org/10.1093/cercor/bhw157
