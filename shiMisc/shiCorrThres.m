@@ -1,6 +1,6 @@
 function h = shiCorrThres(x,varargin)
 %
-% returns logical matrix indicating whether correlation coefficients are above certain a threshold
+% returns logical matrix indicating whether correlation coefficients are within certain a threshold
 %
 % can deal with a large number of variables
 %
