@@ -1,6 +1,12 @@
 function Part = shiStrBreak(Str,StrSep)
 
 % breaks string(s) into parts
+% 2024/4/4
+
+if isempty(Str)
+    Part = cell(0);
+    return;
+end
 
 Str = cellstr(char(Str));
 

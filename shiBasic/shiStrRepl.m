@@ -14,7 +14,7 @@ function Strucel = shiStrRepl(Strucel,Old,New,isRegExp)
 %   SPM_new = shiStrRepl(SPM,'\','/',false)
 %   (will update directory and filesep in SPM)
 %
-% Zhenhao Shi 2020/1/20
+% Zhenhao Shi 2024/4/3
 
 if ~exist('isRegExp','var') || isempty(isRegExp)
     isRegExp = true;
@@ -42,6 +42,16 @@ else
 end
 
 if ischar(Strucel) || isstring(Strucel)
-    Strucel = REPL_FUN(Strucel,Old,New);
+    try
+        Strucel = REPL_FUN(Strucel,Old,New);
+    catch
+        if ischar(Strucel) && size(Strucel,1)>1
+            Strucel = cellstr(Strucel);
+            for i = 1:numel(Strucel)
+                Strucel{i} = REPL_FUN(Strucel{i},Old,New);
+            end
+            Strucel = char(Strucel);
+        end
+    end
 end
     

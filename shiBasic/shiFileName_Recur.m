@@ -9,33 +9,44 @@ function Files = shiFileName_Recur(RootDir,WildCard,verbose)
 %   Files - a cellstring of files found
 %
 %    ###########
-% by Zhenhao Shi @ 2020-8-3
+% by Zhenhao Shi @ 2024-8-1
 %    ###########
 
-if ~exist('verbose','var') || isempty(verbose)
-    verbose = false;
-end
+
+% if ~exist('verbose','var') || isempty(verbose)
+%     verbose = false;
+% end
+
+verbose = false; % no verbose using new method
 
 Files = {};
 
 if iscell(RootDir)
-    for i = 1:length(RootDir)
+    for i = 1:numel(RootDir)
         Files = [Files;shiFileName_Recur(RootDir{i},WildCard,verbose)];
     end
     return;
 end
 
-x = dir(fullfile(RootDir,WildCard));
-nme = {x.name}';
-filt = [x.isdir]';
-x = nme(~filt);
-x = fullfile(RootDir,x);
-if verbose
-    fprintf('% 5d files found in : %s \n',length(x),RootDir);
-end
-Files = [Files;x];
+DIR = dir(fullfile(RootDir,'**',WildCard));
+ISDIR = [DIR.isdir]';
+NAME = {DIR.name}';
+FOLDER = {DIR.folder}';
 
-xDir = shiFolderName(fullfile(RootDir,'*'));
-if ~isempty(xDir)
-    Files = [Files;shiFileName_Recur(fullfile(RootDir,xDir),WildCard,verbose)];
-end
+Files = fullfile(FOLDER(~ISDIR),NAME(~ISDIR));
+
+% 
+% x = dir(fullfile(RootDir,WildCard));
+% nme = {x.name}';
+% filt = [x.isdir]';
+% x = nme(~filt);
+% x = fullfile(RootDir,x);
+% if verbose
+%     fprintf('% 5d files found in : %s \n',length(x),RootDir);
+% end
+% Files = [Files;x];
+% 
+% xDir = shiFolderName(fullfile(RootDir,'*'));
+% if ~isempty(xDir)
+%     Files = [Files;shiFileName_Recur(fullfile(RootDir,xDir),WildCard,verbose)];
+% end
