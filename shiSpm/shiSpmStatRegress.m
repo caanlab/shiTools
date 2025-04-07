@@ -10,9 +10,11 @@ function matlabbatch = shiSpmStatRegress(Dir,Img,Vector,VectorName,doContrast,Ma
 %                voxelwisely against Img. Each column is a variable
 %   VectorName - cell array of strings for variable names (default =
 %                'Vector1', 'Vector2', ...)
+%   doContrast - whether to do [1] and [-1] contrasts for each predictor
+%                (default = true)
 % 
 %    ###########
-% by Zhenhao Shi @ 2020-6-29
+% by Zhenhao Shi @ 2024-6-24
 %    ###########
 % 
 

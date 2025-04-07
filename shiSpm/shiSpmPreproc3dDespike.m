@@ -1,6 +1,6 @@
-function shiSpmPreproc3dDespike(Img,Mask,c1,c2,cOrder,Prefix,existAction)
+function outImg = shiSpmPreproc3dDespike(Img,Mask,c1,c2,cOrder,Prefix,existAction)
 %
-% performs AFNI's 3dDespike
+% performs AFNI's 3dDespike (using the NEW method)
 %
 % Img      : Raw images
 % MaskImg  : Inclusive mask image
@@ -8,7 +8,7 @@ function shiSpmPreproc3dDespike(Img,Mask,c1,c2,cOrder,Prefix,existAction)
 % cOrder   : Curve fit order. Sets the number of sin and cosine terms to fit. (Default is number of volumes / 30).
 % Prefix   : defalt = 'k'
 %
-% 
+% 2024.02.26
 
 
 sz_chk = 300;
@@ -91,19 +91,22 @@ cnt = 0;
 despiked = 0;
 fprintf('\n3dDespike:       ');
 
+invX = (X.' * X) \ X.';
+
 while i1 <= size(Y,2)
 
     cnt = cnt+1;
 
     xY = Y(:,i1:i2);
-    xB = shiStatLeastAbsDevReg(xY, X);
+    % xB = shiStatLeastAbsDevReg(xY, X); % LAD regression using IRLS
+    xB = DES_solve(xY,invX); % 3ddespike NEW algorithm
 
     % residual from predicted
     xY_predict = X * xB;
     xY_resid = xY - xY_predict;      % Get actual value minus predicted values
 
-    % scaled median absolute deviation of absolute deviation from median absolute deviation
-    xY_sigma = sqrt(pi/2) .* median(abs( abs(xY_resid) - median(abs(xY_resid)) ));
+    % scaled median absolute deviation
+    xY_sigma = sqrt(pi/2) .* median(abs(xY_resid));
 
     % standardized residual
     xY_sresid = xY_resid ./ xY_sigma;
@@ -137,7 +140,7 @@ Yout = reshape(Yout',size(Yin));
 for i = 1:length(Img)
     Vo = V(i);
     Vo.fname = outImg{i};
-    Vo.descrip = [Vo.descrip, sprintf('; 3ddespike, c1=%g, c2=%g, corder=%d, pct_dspkd=%g', c1, c2, cOrder,pct_dspkd)];
+    Vo.descrip = [Vo.descrip, sprintf('; 3ddespikeNEW, c1=%g, c2=%g, corder=%d, pct_dspkd=%g', c1, c2, cOrder,pct_dspkd)];
     spm_write_vol(Vo,Yout(:,:,:,i));
 end
 
@@ -163,4 +166,42 @@ for i = 1:cOrder
     X(:, cnt) = cos(((1:nImg)' * 2 * pi * i) / nImg);
     cnt = cnt + 1;
 end
+
+
+%%
+
+function [med,mad] = mead9(xY)
+
+[ntim,nvox] = size(xY);
+[med,mad] = deal(nan(ntim,nvox));
+
+ja = [ones(1,4), 1:ntim-8, repmat(ntim-8,1,4)];
+jb = ja + 8;
+
+for jj = 1:ntim
+    med(jj,:) = median(xY(ja(jj):jb(jj),:));
+    mad(jj,:) = median(abs( xY(ja(jj):jb(jj),:) - med(jj,:) ));
+end
+
+
+%%
+
+function xY = DES_despike9(xY)
+
+[zme,zma] = mead9(xY);
+
+ind = abs(xY - zme) > median(zma) * 6.789; % threshold value copied from 3ddespike
+
+xY(ind) = zme(ind);
+
+if any(ind(:))
+    fprintf('♂');
+end
+
+
+%%
+
+function coef = DES_solve(xY,invX)
+
+coef = invX * DES_despike9(xY);
 

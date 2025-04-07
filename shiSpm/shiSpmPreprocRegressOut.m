@@ -13,7 +13,7 @@ function [outImg,outSpmMat,matlabbatch] = shiSpmPreprocRegressOut(Img,CovData,Co
 %   CovTxt      - text files containing variables to be regressed out (one column per variable) (def: '' (no file))
 %   CovRoi      - ROIs whose signals to be regressed out (def: '' (no Roi))
 %
-% Zhenhao Shi, 2019-10-31
+% Zhenhao Shi, 2025-3-20
 %
 
 if ~exist('Prefix','var') || isempty(Prefix)
@@ -67,7 +67,11 @@ Cov_3 = shiSpmRoiXtr(Img,CovRoi);
 CovAll = [Cov_1, Cov_2, Cov_3];
 
 
-CovName = [shiStrConcat('CovData',1:size(Cov_1,2));shiStrConcat('CovTxt',1:size(Cov_2,2));shiStrConcat('CovRoi',1:size(Cov_3,2))];
+CovName = [
+    shiIf(size(Cov_1,2)==0, [], shiStrConcat('CovDat',1:size(Cov_1,2)));
+    shiIf(size(Cov_2,2)==0, [], shiStrConcat('CovTxt',1:size(Cov_2,2)));
+    shiIf(size(Cov_3,2)==0, [], shiStrConcat('CovRoi',1:size(Cov_3,2)));
+    ];
 
 
 %-----------------------------------------------------------------------

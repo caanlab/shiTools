@@ -548,9 +548,9 @@ for i = 1:size(TABLE_PRINT,1)
     if ischar(TABLE_PRINT{i,1})
         TABLE_PRINT_TEXT{i,1} = 'Text';
     elseif ~isequal(TABLE_PRINT{i,2},TABLE_PRINT{i-1,2})
-        TABLE_PRINT_TEXT{i,1} = sprintf('%s (k=%d, Z=%.2f, x/y/z=%d/%d/%d)', TABLE_PRINT{i,11}, TABLE_PRINT{i,4}, TABLE_PRINT{i,7}, TABLE_PRINT{i,8}, TABLE_PRINT{i,9}, TABLE_PRINT{i,10});
+        TABLE_PRINT_TEXT{i,1} = sprintf('%s (k=%d, Z=%.2f, x/y/z=%g/%g/%g)', TABLE_PRINT{i,11}, TABLE_PRINT{i,4}, TABLE_PRINT{i,7}, TABLE_PRINT{i,8}, TABLE_PRINT{i,9}, TABLE_PRINT{i,10});
     else
-        TABLE_PRINT_TEXT{i,1} = sprintf('%s (Z=%.2f, x/y/z=%d/%d/%d)', TABLE_PRINT{i,11}, TABLE_PRINT{i,7}, TABLE_PRINT{i,8}, TABLE_PRINT{i,9}, TABLE_PRINT{i,10});
+        TABLE_PRINT_TEXT{i,1} = sprintf('%s (Z=%.2f, x/y/z=%g/%g/%g)', TABLE_PRINT{i,11}, TABLE_PRINT{i,7}, TABLE_PRINT{i,8}, TABLE_PRINT{i,9}, TABLE_PRINT{i,10});
     end
 end
 

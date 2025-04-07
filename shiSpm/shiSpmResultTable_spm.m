@@ -123,9 +123,9 @@ TABLE_PRINT_TEXT = cell(size(TABLE_PRINT,1),1);
 TABLE_PRINT_TEXT{1} = 'Text';
 for i = 3:size(TABLE_PRINT,1)
     if ~isempty(TABLE_PRINT{i,xK})
-        TABLE_PRINT_TEXT{i,1} = sprintf('%s (k=%d, Z=%.2f, x/y/z=%d/%d/%d)', TABLE_PRINT{i,xLab}, TABLE_PRINT{i,xK}, spm_invNcdf(1-TABLE_PRINT{i,xP}), TABLE_PRINT{i,xCoord}(1), TABLE_PRINT{i,xCoord}(2), TABLE_PRINT{i,xCoord}(3));
+        TABLE_PRINT_TEXT{i,1} = sprintf('%s (k=%d, Z=%.2f, x/y/z=%g/%g/%g)', TABLE_PRINT{i,xLab}, TABLE_PRINT{i,xK}, spm_invNcdf(1-TABLE_PRINT{i,xP}), TABLE_PRINT{i,xCoord}(1), TABLE_PRINT{i,xCoord}(2), TABLE_PRINT{i,xCoord}(3));
     else
-        TABLE_PRINT_TEXT{i,1} = sprintf('%s (Z=%.2f, x/y/z=%d/%d/%d)', TABLE_PRINT{i,xLab}, spm_invNcdf(1-TABLE_PRINT{i,xP}), TABLE_PRINT{i,xCoord}(1), TABLE_PRINT{i,xCoord}(2), TABLE_PRINT{i,xCoord}(3));
+        TABLE_PRINT_TEXT{i,1} = sprintf('%s (Z=%.2f, x/y/z=%g/%g/%g)', TABLE_PRINT{i,xLab}, spm_invNcdf(1-TABLE_PRINT{i,xP}), TABLE_PRINT{i,xCoord}(1), TABLE_PRINT{i,xCoord}(2), TABLE_PRINT{i,xCoord}(3));
     end
 end
 

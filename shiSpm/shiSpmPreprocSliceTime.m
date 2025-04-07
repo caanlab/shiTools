@@ -12,7 +12,7 @@ function [outImg,matlabbatch] = shiSpmPreprocSliceTime(Img,Tr,Ta,SliceOrder,RefS
 %   SliceOrder          - slice order or slice time in millisecond
 %   RefSlice            - reference slice for slice timing (spatial slice index or slice time in millisecond)
 %
-% Zhenhao Shi, 2019-10-30
+% Zhenhao Shi, 2025-4-5
 %
 
 
@@ -23,6 +23,18 @@ end
 
 [pth,nme,ext] = shiFileParts(Img);
 outImg = shiStrConcat(pth,filesep,Prefix,nme,ext);
+
+if (~exist('RefSlice','var')||isempty(RefSlice)) && (~exist('SliceOrder','var')||isempty(SliceOrder))
+    fprintf('\nWARNING:\n    Slice Timing: no slice info provided, skipping and simply copying images...\n\n');
+    if isempty(Prefix)
+        return;
+    end
+    for k = 1:length(Img)
+        copyfile(Img{k},outImg{k});
+    end
+    matlabbatch = [];
+    return;
+end
 
 if ~exist('existAction','var') || isempty(existAction)
     existAction = 'ask';
@@ -41,29 +53,23 @@ if exist(outImg{1},'file') && strcmpi(existAction,'ask')
     end
 end
 
-if (~exist('RefSlice','var')||isempty(RefSlice)) && (~exist('SliceOrder','var')||isempty(SliceOrder))
-    fprintf('\nWARNING:\n    Slice Timing: no slice info provided, skipping and simply copying images...\n\n');
-    for k = 1:length(Img)
-        copyfile(Img{k},outImg{k});
-    end
-    matlabbatch = [];
-    return;
-end
+nSlices = numel(SliceOrder);
 
 if ~isequal(1:numel(SliceOrder),sort(SliceOrder))
     unit = 'slice times';
 else
     unit = 'slice indices';
+    if ~exist('Ta','var')||isempty(Ta)
+        Ta = Tr - Tr./nSlices;
+    end
 end
-
-nSlices = numel(SliceOrder);
 
 if ~exist('RefSlice','var') || isempty(RefSlice) || ~(RefSlice>=0)
     switch unit
         case 'slice indices'
             RefSlice = SliceOrder(floor(median(1:nSlices)));
         case 'slice times'
-            RefSlice = SliceOrder(abs(SliceOrder-median(SliceOrder))==min(abs(SliceOrder-median(SliceOrder))));
+            RefSlice = Tr*1000/2; % half-way in a TR; old version: SliceOrder(abs(SliceOrder-median(SliceOrder))==min(abs(SliceOrder-median(SliceOrder))));
             RefSlice = RefSlice(end);
     end
 end

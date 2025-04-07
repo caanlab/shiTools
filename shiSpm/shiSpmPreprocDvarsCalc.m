@@ -4,7 +4,7 @@ function [Dvars_standardized,Dvars_raw,Dvars_spike,Stat] = shiSpmPreprocDvarsCal
 %
 % (using code by Afyouni (https://github.com/asoroosh/DVARS)
 
-% suggest cutoff for standardized Dvars: 2
+% "the final candidate time-points to be scrubbed is a conjunction of statistical and practical significance; we choose a 5% familywise error rate significance level via Bonferroni and a 5% D-var cut-off"
 
 noMask = ~exist('Mask_inSkull','var') || isempty(Mask_inSkull);
 noMean = ~exist('Img_mean','var') || isempty(Img_mean);

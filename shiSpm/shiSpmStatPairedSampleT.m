@@ -114,7 +114,7 @@ spm_jobman('serial',matlabbatch);
 
 %%
 StatType = 'PairedSampleT'; %#ok<*NASGU>
-if ~exist('write4D','var') || isempty(write4D) || write4D
+if ~exist('write4D','var') || isempty(write4D) || ~write4D
 else
     shiSpm3dTo4d(Img1,fullfile(Dir,'ConImg4d_Cond1.nii'));
     shiSpm3dTo4d(Img2,fullfile(Dir,'ConImg4d_Cond2.nii'));
