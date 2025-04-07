@@ -140,17 +140,17 @@ while doSETUP
     switch xDespike_Method
         case 1, xDespike_Method = '3dDespike';
             xDespike_Parameter{1} = spm_input('parameter c1:', [], '2.5|enter number', [2.5,NaN], 1);
-            if isnan(xDespike_Parameter{1}), xDespike_Parameter{1} = spm_input('parameter c1:', '+0', 'e', 2.5); else, xDespike_Parameter{1} = []; end
+            if isnan(xDespike_Parameter{1}), xDespike_Parameter{1} = spm_input('parameter c1:', '+0', 'e', 2.5); end
             xDespike_Parameter{2} = spm_input('parameter c2:', [], '4.0|enter number', [4.0,NaN], 1);
-            if isnan(xDespike_Parameter{2}), xDespike_Parameter{2} = spm_input('parameter c2:', '+0', 'e', 4.0); else, xDespike_Parameter{2} = []; end
+            if isnan(xDespike_Parameter{2}), xDespike_Parameter{2} = spm_input('parameter c2:', '+0', 'e', 4.0); end
             xDespike_Parameter{3} = spm_input('parameter cOrder:', [], '#Image/30|enter number', [1,2], 1);
             if xDespike_Parameter{3} == 1, xDespike_Parameter{3} = [];
-            elseif xDespike_Parameter{3} == 2, xDespike_Parameter{3} = spm_input('parameter cOrder:', '+0', 'e'); else, xDespike_Parameter{3} = []; end
+            elseif xDespike_Parameter{3} == 2, xDespike_Parameter{3} = spm_input('parameter cOrder:', '+0', 'e'); end
         case 2, xDespike_Method = 'ArtRepair';
             xDespike_Parameter{1} = spm_input('parameter WinSize:', [], '17|enter number', [17,NaN], 1);
-            if isnan(xDespike_Parameter{1}), xDespike_Parameter{1} = spm_input('parameter WinSize:', '+0', 'e', 17); else, xDespike_Parameter{1} = []; end
+            if isnan(xDespike_Parameter{1}), xDespike_Parameter{1} = spm_input('parameter WinSize:', '+0', 'e', 17); end
             xDespike_Parameter{2} = spm_input('parameter Threshold:', [], '4|enter number', [4,NaN], 1);
-            if isnan(xDespike_Parameter{2}), xDespike_Parameter{2} = spm_input('parameter Threshold:', '+0', 'e', 4); else, xDespike_Parameter{2} = []; end
+            if isnan(xDespike_Parameter{2}), xDespike_Parameter{2} = spm_input('parameter Threshold:', '+0', 'e', 4); end
         otherwise, xDespike_Method = [];
     end
 
@@ -272,7 +272,7 @@ while doSETUP
     % xFilter_CustCovFiltInd
     % leave empty for default filtering all custom covariates, or 1 * nCov vector of TRUE/FALSE indicating which ones to be filtered
     MSG = 'which custom covariates to skip filter';
-    xFilter_CustCovFiltInd = spm_input(MSG, [], 'none|enter indices', [1,2]);
+    xFilter_CustCovFiltInd = spm_input(MSG, [], 'none|enter indices', [1,2], 1);
     switch xFilter_CustCovFiltInd
         case 1, xFilter_CustCovFiltInd = [];
         case 2, xFilter_CustCovFiltInd = spm_input(MSG, '+0', 'e', [], Inf);
@@ -750,9 +750,6 @@ FIN_req = unique(FIN_req);
 FIN_req_letter = NUM2(FIN_req);
 FIN_req_detail = DETAIL(FIN_req);
 
-
-
-
 function req = shipipe_get_in_from_out(in,OUT)
 req = nan(size(in));
 for i = 1:length(in)
@@ -761,23 +758,4 @@ for i = 1:length(in)
 end
 req = unique(req);
 req(isnan(req)) = [];
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
