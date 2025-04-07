@@ -54,38 +54,201 @@ shiRBootBcaConfInt <- function(
 ####
 
 shiRDescriptive <- function(
-    df, GrpVar=NULL
+		df, GrpVar=NULL
 ) {
-  FUNC_LIST <- list(
-    "N"    = function(x)sum(!is.na(x)),
-    "MEAN" = function(x)mean(x,na.rm=TRUE),
-    "SD"   = function(x)sd(x,na.rm=TRUE),
-    "SE"   = function(x)(sd(x,na.rm=TRUE))/sqrt(sum(!is.na(x))),
-    "MED"  = function(x)quantile(x,probs=0.50,na.rm=TRUE),
-    "Q25"  = function(x)quantile(x,probs=0.25,na.rm=TRUE),
-    "Q75"  = function(x)quantile(x,probs=0.70,na.rm=TRUE),
-    "MIN"  = function(x)min(x,na.rm=TRUE),
-    "MAX"  = function(x)max(x,na.rm=TRUE),
-    "SUM"  = function(x)sum(x,na.rm=TRUE)
-  )
-  if (length(GrpVar)==0) {
-    df %<>% lapply( function(x)shiRIf(is.factor(x),as.numeric(as.character(x)),x) ) %>% as.tibble()
-    df %<>% dplyr::select(-c(names(df)[sapply(df,function(x)all(is.na(x)))]))
-    Descr <- data.frame(Var=names(df))
-    for (i in 1:length(FUNC_LIST)) {
-      Descr[[names(FUNC_LIST)[i]]]<- sapply(df,FUNC_LIST[[i]])
-    }
-  } else {
-    BY_LIST <- df %>% dplyr::select(!!sym(GrpVar))
-    df %<>% lapply( function(x)shiRIf(is.factor(x),as.numeric(as.character(x)),x) ) %>% as.tibble() %>% dplyr::select(-c(GrpVar))
-    df %<>% dplyr::select(-c(names(df)[sapply(df,function(x)all(is.na(x)))]))
-    Descr <- aggregate(x=df, by=BY_LIST, FUN=FUNC_LIST[[1]]) %>% melt(id.vars=GrpVar, value.name=names(FUNC_LIST)[1])
-    for (i in 2:length(FUNC_LIST)) {
-      Descr %<>% cbind( aggregate(x=df, by=BY_LIST, FUN=FUNC_LIST[[i]]) %>% melt(id.vars=GrpVar, value.name=names(FUNC_LIST)[i]) %>% dplyr::select(-c(GrpVar,"variable")) )
-    }
-    Descr %<>% dplyr::rename("Var" = "variable")
-  }
-  return(Descr)
+	FUNC_LIST <- list(
+		"N"    = function(x)sum(!is.na(x)),
+		"MEAN" = function(x)mean(x,na.rm=TRUE),
+		"SD"   = function(x)sd(x,na.rm=TRUE),
+		"SE"   = function(x)(sd(x,na.rm=TRUE))/sqrt(sum(!is.na(x))),
+		"MED"  = function(x)quantile(x,probs=0.50,na.rm=TRUE),
+		"Q25"  = function(x)quantile(x,probs=0.25,na.rm=TRUE),
+		"Q75"  = function(x)quantile(x,probs=0.70,na.rm=TRUE),
+		"MIN"  = function(x)min(x,na.rm=TRUE),
+		"MAX"  = function(x)max(x,na.rm=TRUE),
+		"SUM"  = function(x)sum(x,na.rm=TRUE)
+	)
+	if (length(GrpVar)==0) {
+		df %<>% lapply( shiRFact2Num ) %>% tibble::as.tibble()
+		df %<>% dplyr::select(-c(names(df)[sapply(df,function(x)all(is.na(x)))]))
+		Descr <- data.frame(Var=names(df))
+		for (i in 1:length(FUNC_LIST)) {
+			Descr[[names(FUNC_LIST)[i]]]<- sapply(df,FUNC_LIST[[i]])
+		}
+	} else {
+		BY_LIST <- df %>% dplyr::select(!!sym(GrpVar))
+		df %<>% dplyr::select(-!!sym(GrpVar)) %>% lapply( shiRFact2Num ) %>% tibble::as.tibble()
+		df %<>% dplyr::select(-c(names(df)[sapply(df,function(x)all(is.na(x)))]))
+		Descr <- aggregate(x=df, by=BY_LIST, FUN=FUNC_LIST[[1]]) %>% reshape2::melt(id.vars=GrpVar, value.name=names(FUNC_LIST)[1])
+		for (i in 2:length(FUNC_LIST)) {
+			Descr %<>% cbind( aggregate(x=df, by=BY_LIST, FUN=FUNC_LIST[[i]]) %>% reshape2::melt(id.vars=GrpVar, value.name=names(FUNC_LIST)[i]) %>% dplyr::select(-c(GrpVar,"variable")) )
+		}
+		Descr %<>% dplyr::rename("Var" = "variable")
+	}
+	return(Descr)
+}
+
+####
+
+shiRDescriptivePrint <- function(
+		df, # data frame
+		GrpVar = NULL, # which group variable(s)
+		Ignore = NULL, # which variables to be ignored (e.g. subject IDs)
+		DoTest = TRUE, # whether to run group comparisons (always false unless exactly 2 groups and NumTest and CatTest are correctly specified)
+		NumTest = "wilcox.test", # or t.test
+		CatTest = "fisher.test", # or chisq.test
+		digits = 2 # for rounding purpose, must be non-negative integer, may be Inf for no rounding
+) {
+	
+	sym=dplyr::sym
+	
+	if (digits == Inf) {
+		ROUND <- function(num)sprintf("%g",num)
+	} else {
+		ROUND <- function(num)sprintf(paste0("%.",digits,"f"),num)
+	}
+	
+	GROUP = ".shiRDescriptivePrint.Grp"
+	
+	if (length(GrpVar)==0) {
+		df %<>% dplyr::mutate(!!sym(GROUP):="All")
+		df[[GROUP]] %<>% factor()
+	} else if (length(GrpVar)==1) {
+		df %<>% dplyr::mutate(!!sym(GROUP):=!!sym(GrpVar[1]))
+	} else {
+		df %<>% dplyr::mutate(!!sym(GROUP):=!!sym(GrpVar[1]))
+		for (i in 2:length(GrpVar)) {
+			df[[GROUP]] %<>% interaction(df[[GrpVar[i]]])
+		}
+	}
+	
+	df[[GROUP]] <- droplevels(df[[GROUP]])
+	NGRP <- nlevels(df[[GROUP]])
+	GRPLEV <- levels(df[[GROUP]])
+	
+	DOTEST <- DoTest && NGRP == 2
+	
+	VarList <- names(df) %>% setdiff(c(GrpVar,GROUP,Ignore))
+	
+	for (i in 1:length(VarList)) {
+		if (!is.numeric(df[[VarList[i]]])) {
+			df[[VarList[i]]] %<>% factor()
+		}
+	}
+	ISFACTOR <- sapply(df %>% dplyr::select(VarList),is.factor)
+	
+	# header
+	
+	N <- dplyr::count(df,!!sym(GROUP))$n
+	TABLE <- "Variable"
+	for (grp in 1:NGRP) {
+		xTAB <- GRPLEV[grp] %>% paste0(" (n=",N[grp],")")
+		TABLE %<>% c(xTAB)
+	}
+	
+	# each variable
+	for (i in 1:length(VarList)) {
+		xdf <- df %>% dplyr::filter(!is.na(!!sym(VarList[i])))
+		# variable name
+		xTAB <- c(VarList[i], rep("",NGRP))
+		TABLE %<>% rbind(xTAB)
+		# no. of subjects
+		xN <- dplyr::count(xdf, !!sym(GROUP))$n
+		if (!identical(N,xN)) {	TABLE %<>% rbind(c("No. of participants", xN)) }
+		# stats for factor
+		if (ISFACTOR[i]) {
+			# column 0
+			xTAB <- paste0(levels(df[[VarList[i]]]),", No. (%)")
+			# column for each group
+			for (grp in 1:NGRP) {
+				xTAB1 <- dplyr::count(xdf %>% dplyr::filter(!!sym(GROUP)==GRPLEV[grp]), !!sym(VarList[i]))$n
+				xTAB1 %<>% paste0(" (",(xTAB1/xN[grp]*100) %>% ROUND,"%)")
+				xTAB %<>% cbind(xTAB1)
+			}
+			# stats for numerical
+		} else {
+			# column 0
+			xTAB <- c("Mean (SD)","Median (IQR)")
+			# column for each group
+			for (grp in 1:NGRP) {
+				xx <- xdf[[VarList[i]]][xdf[[GROUP]]==GRPLEV[grp]]
+				xTAB1 <- c(mean(xx) %>% ROUND, median(xx) %>% ROUND)
+				xTAB2 <- c(sd(xx) %>% ROUND,paste0(quantile(xx,.25) %>% ROUND,"–",quantile(xx,.75) %>% ROUND))
+				xTAB1 %<>% paste0(" (", xTAB2, ")")
+				xTAB %<>% cbind(xTAB1)
+			}
+		}
+		# add to main table
+		TABLE %<>% rbind(xTAB)
+	}
+	
+	rownames(TABLE) <- NULL
+	colnames(TABLE) <- NULL
+	
+	if ((tolower(NumTest) != "t.test" && tolower(NumTest) != "wilcox.test") || (tolower(CatTest) != "chisq.test" && tolower(CatTest) != "fisher.test")) {
+		DOTEST = FALSE
+	}
+	if (!DOTEST) {
+		TABLE0 <- TABLE
+		TABLE0[!sapply(TABLE0[,2],function(x)nchar(x)==0),1] %<>% {paste0("  ",.)}
+		TABLE0[1,1] <- "Variable"
+		print.table(TABLE0)
+		return(TABLE)
+	}
+	
+	if (tolower(NumTest) == "t.test") {
+		NUMTEST = function(x,y)t.test(x,y)
+	} else if (tolower(NumTest) == "wilcox.test") {
+		NUMTEST = function(x,y)wilcox.test(x,y)
+	}
+	
+	if (tolower(CatTest) == "chisq.test") {
+		CATTEST = function(x,y)chisq.test(x,y)
+	} else if (tolower(CatTest) == "fisher.test") {
+		CATTEST = function(x,y)fisher.test(x,y)
+	}
+	
+	xTAB <- "p-value"
+	xCNT <- 0
+	for (i in 2:nrow(TABLE)) {
+		if (TABLE[i,2] != "") {xTAB %<>% c("")} else {
+			xCNT <- xCNT+1
+			xVAR <- TABLE[i,1]
+			if (ISFACTOR[xCNT]) {
+				xSTAT <- CATTEST(df[[GROUP]],df[[xVAR]])
+			} else {
+				xSTAT <- NUMTEST(df[[xVAR]][df[[GROUP]]==GRPLEV[1]],df[[xVAR]][df[[GROUP]]==GRPLEV[2]])
+			}
+			xTAB %<>% c(paste0("p",shiRFormatPval(xSTAT$p.value)))
+		}
+	}
+	
+	TABLE %<>% cbind(xTAB)
+	
+	rownames(TABLE) <- NULL
+	colnames(TABLE) <- NULL
+	
+	TABLE0 <- TABLE
+	TABLE0[!sapply(TABLE0[,2],function(x)nchar(x)==0),1] %<>% {paste0("  ",.)}
+	TABLE0[1,1] <- "Variable"
+	print.table(TABLE0)
+	return(TABLE)
+	
+}
+
+####
+
+shiRFact2Num <- function(
+		xFact
+) {
+	if (is.factor(xFact))  {
+		if (lapply(levels(xFact),is.character) %>% unlist %>% any) {
+			xFact <- as.numeric(xFact)
+		} else {
+			xFact <- as.numeric(as.character(xFact))
+		}
+	}
+	return(xFact)
 }
 
 ####
@@ -458,12 +621,13 @@ shiRIf <- function(
 shiRResid <- function(
     data=NULL,
     covname,
+    ignore=NULL,
     ...
 ) {
   covname <- intersect(covname,names(data))
   dataNew <- data[,NULL]
   for (i in names(data)) {
-    if (!is.numeric(data[[i]])) {
+    if ((!is.numeric(data[[i]])) || (i %in% ignore)) {
       dataNew[[i]] <- data[[i]]
       next
     }

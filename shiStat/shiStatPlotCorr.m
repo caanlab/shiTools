@@ -1,4 +1,4 @@
-function [rho,H] = shiStatPlotCorr(Y,X,Group,YName,XName,Title,CorrType,verbose)
+function [rho,H,fDots,fLines] = shiStatPlotCorr(Y,X,Group,YName,XName,Title,CorrType,verbose)
  
 % gives Y-X scatterplot as well as linear trendline by groups, and prints correlation coefficient and p-values at command window
 %
@@ -48,7 +48,7 @@ function [rho,H] = shiStatPlotCorr(Y,X,Group,YName,XName,Title,CorrType,verbose)
 %   returns handle of the scatter plot
 % 
 %    ###########
-% by Zhenhao Shi @ 2015-1-6
+% by Zhenhao Shi @ 2024-8-1
 %    ###########
 
 
@@ -119,20 +119,23 @@ sig = nan(length(GroupLabel),1);
 P = cell(length(GroupLabel),1);
 R = cell(length(GroupLabel),1);
 
+fDots = cell(length(GroupLabel),1);
+fLines = cell(length(GroupLabel),1);
+
 for i = 1:length(GroupLabel)
     [rho(i),sig(i)] = corr(X(GroupIndex{i}),Y(GroupIndex{i}),'type',CorrType);
     N(i) = length(X(GroupIndex{i}));
     P{i} = polyfit(X(GroupIndex{i}),Y(GroupIndex{i}),1);
     R{i} = P{i}(1) .* X(GroupIndex{i}) + P{i}(2);
-    plot(X(GroupIndex{i}), Y(GroupIndex{i}), Marker{i}, 'MarkerEdgeColor', Color{i},'MarkerSize',10);
+    fDots{i} = plot(X(GroupIndex{i}), Y(GroupIndex{i}), Marker{i}, 'MarkerEdgeColor', Color{i},'MarkerSize',20);
     hold on;
 end
 
 for i = 1:length(GroupLabel)
     if rho(i) > 0
-        plot([min(X(GroupIndex{i})),max(X(GroupIndex{i}))], [min(R{i}),max(R{i})], '-','Color',Color{i}, 'LineWidth', 1);
+        fLines{i} = plot([min(X(GroupIndex{i})),max(X(GroupIndex{i}))], [min(R{i}),max(R{i})], '-','Color',Color{i}, 'LineWidth', 1);
     else
-        plot([min(X(GroupIndex{i})),max(X(GroupIndex{i}))], [max(R{i}),min(R{i})], '-','Color',Color{i}, 'LineWidth', 1);
+        fLines{i} = plot([min(X(GroupIndex{i})),max(X(GroupIndex{i}))], [max(R{i}),min(R{i})], '-','Color',Color{i}, 'LineWidth', 1);
     end
     hold on;
 end
@@ -143,7 +146,7 @@ axis([min(X)-(max(X)-min(X))/20 max(X)+(max(X)-min(X))/20 ...
     min(Y)-(max(Y)-min(Y))/20 max(Y)+(max(Y)-min(Y))/20]);
 
 if length(GroupLabel)>1
-    set(legend([GroupLabel;GroupLabel]),'Interpreter','none');
+    set(legend([GroupLabel;GroupLabel]),'Interpreter','none','Location','best');
 end
 
 if nargin < 4

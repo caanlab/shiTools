@@ -13,8 +13,7 @@ function [BH_corrected_p,BHY_corrected_p] = shiStatFdr(p,ignoreLowerTriag,ignore
 %   
 %   pval                  - scalar, vector, or matrix of raw p values
 %   BH_corrected_p        - corrected p (B&H 1995)
-%   BHY_corrected_p       - corrected p (B&Y 2001)
-%              (If the tests are under arbitrary dependence)
+%   BHY_corrected_p       - corrected p (B&Y 2001) (If the tests are under arbitrary dependence)
 %
 %    ###########
 % by Zhenhao Shi @ 2016-12-21
