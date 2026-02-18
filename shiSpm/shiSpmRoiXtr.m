@@ -8,7 +8,8 @@ function [X,Roi,RoiFormat] = shiSpmRoiXtr(Img,Roi,Radius,SummFunc)
 % shiSpmRoiXtr(Img,Roi)
 % shiSpmRoiXtr(Img,Roi,Radius)
 % shiSpmRoiXtr(Img,Roi,SummFunc)
-% shiSpmRoiXtr(Img,Roi,Radius,SummFunc)% X: n_Img-by-n_Roi matrix
+% shiSpmRoiXtr(Img,Roi,Radius,SummFunc)
+% X: n_Img-by-n_Roi matrix
 %
 % Example:
 % X=shiSpmRoiXtr({'con_0001.nii';'con_0002.nii'},{which('shi_AAL_RIns.img'),[0 50 5 3],[45 2 2 5]},'mean'}
@@ -17,9 +18,22 @@ function [X,Roi,RoiFormat] = shiSpmRoiXtr(Img,Roi,Radius,SummFunc)
 %   region at 45/2/2, from the images con_0001.nii and con_0002.nii.
 %
 %    ###########
-% by Zhenhao Shi @ 2021-3-22
+% by Zhenhao Shi @ 2026-2-18
 %    ###########
 % 
+
+
+%% check Img 
+
+File_Img = char(Img);
+for i = size(File_Img,1)
+    if ~exist(deblank(File_Img(i,:)),'file')
+        error('cannot find %s',File_Img(i,:))
+    end
+end
+
+
+%%
 
 if isempty(Roi)
     X = [];
@@ -38,15 +52,30 @@ if ~exist('Radius','var') || isempty(Radius) || ischar(Radius) || ~(Radius>=0)
     Radius = 5;
 end
 
+if ~exist('SummFunc','var') || isempty(SummFunc), SummFunc = 'mea'; end
 
-%% check Img 
 
-File_Img = char(Img);
-for i = size(File_Img,1)
-    if ~exist(deblank(File_Img(i,:)),'file')
-        error('cannot find %s',File_Img(i,:))
+%%
+
+ChkSz = 500;
+if size(File_Img,1) > ChkSz && ~strcmpi(SummFunc(1:3),'eig') % no chunking if eig
+    s = sprintf('RoiXtr chunk: 0/%d',ceil(size(File_Img,1)./ChkSz));
+    fprintf('%s',s);
+    X = [];
+    for i = 1:ceil(size(File_Img,1)./ChkSz)
+        fprintf(repmat('\b',1,length(s)));
+        s = sprintf('RoiXtr chunk: %d/%d',i,ceil(size(File_Img,1)./ChkSz));
+        fprintf('%s',s);
+        [xX,xRoi,RoiFormat] = shiSpmRoiXtr( Img( (i*ChkSz-ChkSz+1):min(i*ChkSz,size(File_Img,1)) ,:), Roi,Radius,SummFunc);
+        X = [X;xX];
     end
+    Roi = xRoi;
+    fprintf('\n');
+    return;
 end
+
+
+%%
 
 [Roi,RoiFormat] = shiSpmRoiFormat(Roi,Radius);
 
