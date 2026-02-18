@@ -20,13 +20,13 @@ end
 while isequal(Root(end),filesep)
     Root = Root(1:end-1);
 end
-while isequal(DestFolder(end),filesep)
-    DestFolder = DestFolder(1:end-1);
-end
+% while isequal(DestFolder(end),filesep)
+%     DestFolder = DestFolder(1:end-1);
+% end
     
 FileFullPath = cellstr(char(FileFullPath));
 
-if ~isdir(Root)
+if ~isfolder(Root)
     error('Root folder %s does not exist',Root);
 end
 
@@ -40,7 +40,7 @@ end
 
 File_pt2_new = strrep(cellstr(File_pt2(:,2:end)),filesep,ReplaceFileSepWith);
 
-OutputFile = shiStrConcat(shiMkdir(DestFolder),filesep,File_pt2_new);
+OutputFile = fullfile(shiMkdir(DestFolder),File_pt2_new);
 
 for i = 1:length(File_pt2_new)
     copyfile(FileFullPath{i},OutputFile{i});

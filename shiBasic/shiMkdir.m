@@ -8,7 +8,7 @@ function DirMade = shiMkdir(varargin)
 %   DirMade - full path of new directory(s)
 % 
 %    ###########
-% by Zhenhao Shi @ 2018-7-17
+% by Zhenhao Shi @ 2025-5-5
 %    ###########
 
 if nargin == 1
@@ -24,13 +24,12 @@ DirMade = cell(size(Dir));
 
 for i = 1:length(Dir)
     try
-        if ~isdir(char(shiFullFileName(Dir{i})))
+        if ~isfolder(char(shiFullFileName(Dir{i})))
             mkdir(Dir{i});
         end
         DirMade{i} = char(shiFullFileName(Dir{i}));
     catch
         error('failed to create: %s\n',Dir{i});
-        DirMade{i} = '';
     end
 end
 
