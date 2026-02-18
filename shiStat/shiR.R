@@ -604,17 +604,6 @@ shiRCat <- function(
   cat("\n")
 }
 
-####
-
-shiRIf <- function(
-    TF,ifT,ifF
-) {
-  if (TF) {
-    return(ifT)
-  } else {
-    return(ifF)
-  }
-}
 
 ####
 

@@ -17,7 +17,7 @@ Tb <- data.frame(
 )
 
 xMdl <- lmer(Brain ~ Session*Crav + (1|Subject), data = Tb, weights = Tb$invwt)
-xFx <- Effect(c("Crav","Session"), mod = xMdl, xlevels = list(Crav = seq(from=0,to=9,by=.05))) %>% as.data.frame() # get ribbon and stuff
+xFx <- effects::Effect(c("Crav","Session"), mod = xMdl, xlevels = list(Crav = seq(from=0,to=9,by=.05))) %>% as.data.frame() # get ribbon and stuff
 
 x <- coef(xMdl)$Subject # get random intercepts, one per subject
 x <- cbind(row.names(x) %>% as.data.frame(), x$`(Intercept)` %>% as.data.frame()) # combine subjects (from x rownames) and intercepts
