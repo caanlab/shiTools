@@ -7,9 +7,13 @@ function [outImg,ArtSliceLogTxt,ArtSliceSummTxt] = shiSpmPreprocArtSlice(Img,Thr
 % before any SPM preprocessing. It is suggested to use this function only 
 % with very noisy data.
 
+if ~exist('Prefix','var') || isempty(Prefix)
+    Prefix = 'p'; % default='p' if repair_flag and mask_flag are default
+end
+
 Img = cellstr(char(Img));
 [Pth,Nme,Ext] = shiFileParts(Img);
-outImg = shiStrConcat(Pth,filesep,Prefix,Nme,Ext);
+outImg = fullfile(Pth,shiStrConcat(Prefix,Nme,Ext));
 
 if ~exist('existAction','var') || isempty(existAction)
     existAction = 'ask';
@@ -37,10 +41,6 @@ end
 
 repair_flag = 1; % default: Repair Bad Slices and Write BadSliceLog ( repairs only the bad slices )
 mask_flag = 1; % default: Automatic ( will generate ArtifactMask image )
-
-if ~exist('Prefix','var') || isempty(Prefix)
-    Prefix = 'g'; % default='g' if repair_flag and mask_flag are default
-end
 
 shi_art_slice(spm_vol(char(Img)),Thres,repair_flag,mask_flag,Prefix);
 
@@ -313,7 +313,7 @@ for i = 3:nscans
                         % if slice is first, addvalue =0  and
                         % slice would be equal to pre in time
                         Yn2(j,:,:) = squeeze(Y4(1,j,:,:))+addvalue;       % set to pre + calculated change from adjacent slice
-                        fprintf('   Interpolated sagittal with pre. Vol %d, Slice %d.\n',i-1,j);
+                        % fprintf('   Interpolated sagittal with pre. Vol %d, Slice %d.\n',i-1,j);
                         fprintf(logID,'   Interpolated sagittal with pre. Vol %d, Slice %d.\n',i-1,j);
 
                     elseif pypost(j) < pq(j) && pypre(j) > pq(j)   % POST OK, PRE BAD
@@ -331,7 +331,7 @@ for i = 3:nscans
                         % if slice is first or adjacent of next volume is bad
                         % addvalue=0 and slice will be equal to post in time
                         Yn2(j,:,:) = squeeze(Y4(3,j,:,:)) + addvalue;        % set to post + calculated change from adjacent slice
-                        fprintf('   Interpolated sagittal with post. Vol %d, Slice %d.\n',i-1,j);
+                        % fprintf('   Interpolated sagittal with post. Vol %d, Slice %d.\n',i-1,j);
                         fprintf(logID,'   Interpolated sagittal with post. Vol %d, Slice %d.\n',i-1,j);
 
                     elseif pypost(j) > pq(j) && pypre(j) > pq(j)   % PRE BAD, POST BAD
@@ -348,13 +348,13 @@ for i = 3:nscans
                         end
 
                         Yn2(j,:,:) = LastGoodVol(j,:,:) + addvalue;          % set to last good known slice + value of change
-                        fprintf('   Interpolated sagittal with latest good one. Vol %d, Slice %d.\n',i-1,j);
+                        % fprintf('   Interpolated sagittal with latest good one. Vol %d, Slice %d.\n',i-1,j);
                         fprintf(logID,'   Interpolated sagittal with latest good one. Vol %d, Slice %d.\n',i-1,j);
 
                     else                                                        % PRE GOOD, POST GOOD (original pre-post inrepolation)
 
                         Yn2(j,:,:) = squeeze((Y4(1,j,:,:) + Y4(3,j,:,:))/2.0);  % interpolate pre and post
-                        fprintf('   Interpolated sagittal. Vol %d, Slice %d.\n',i-1,j);
+                        % fprintf('   Interpolated sagittal. Vol %d, Slice %d.\n',i-1,j);
                         fprintf(logID,'   Interpolated sagittal. Vol %d, Slice %d.\n',i-1,j);
 
                     end
@@ -388,7 +388,7 @@ for i = 3:nscans
                         % if slice is first, addvalue =0  and
                         % slice would be equal to pre in time
                         Yn2(:,j,:) = squeeze(Y4(1,:,j,:))+addvalue;       % set to pre + calculated change from adjacent slice
-                        fprintf('   Interpolated coronal with pre. Vol %d, Slice %d.\n',i-1,j);
+                        % fprintf('   Interpolated coronal with pre. Vol %d, Slice %d.\n',i-1,j);
                         fprintf(logID,'   Interpolated coronal with pre. Vol %d, Slice %d.\n',i-1,j);
                     elseif pypost(j) < pq(j) && pypre(j) > pq(j)   % post ok, pre bad
 
@@ -405,7 +405,7 @@ for i = 3:nscans
                         % if slice is first or adjacent of next volume is bad
                         % addvalue=0 and slice will be equal to post in time
                         Yn2(:,j,:) = squeeze(Y4(3,:,j,:)) + addvalue;        % set to post + calculated change from adjacent slice
-                        fprintf('   Interpolated coronal with post. Vol %d, Slice %d.\n',i-1,j);
+                        % fprintf('   Interpolated coronal with post. Vol %d, Slice %d.\n',i-1,j);
                         fprintf(logID,'   Interpolated coronal with post. Vol %d, Slice %d.\n',i-1,j);
                     elseif pypost(j) > pq(j) && pypre(j) > pq(j)   % pre bad, post bad
 
@@ -421,11 +421,11 @@ for i = 3:nscans
                         end
 
                         Yn2(:,j,:) = LastGoodVol(:,j,:) + addvalue;          % set to last good known slice + value of change
-                        fprintf('   Interpolated coronal with latest good one. Vol %d, Slice %d.\n',i-1,j);
+                        % fprintf('   Interpolated coronal with latest good one. Vol %d, Slice %d.\n',i-1,j);
                         fprintf(logID,'   Interpolated coronal with latest good one. Vol %d, Slice %d.\n',i-1,j);
                     else                                                        % pre good, post good
                         Yn2(:,j,:) = squeeze((Y4(1,:,j,:) + Y4(3,:,j,:))/2.0);  % interpolate pre and post
-                        fprintf('   Interpolated coronal. Vol %d, Slice %d.\n',i-1,j);
+                        % fprintf('   Interpolated coronal. Vol %d, Slice %d.\n',i-1,j);
                         fprintf(logID,'   Interpolated coronal. Vol %d, Slice %d.\n',i-1,j);
                     end
 
@@ -459,7 +459,7 @@ for i = 3:nscans
                         % if slice is first, addvalue =0  and
                         % slice would be equal to pre in time
                         Yn2(:,:,j) = squeeze(Y4(1,:,:,j)) + addvalue;                 % set to pre + calculated change from adjacent slice
-                        fprintf('   Interpolated axial with pre. Vol %d, Slice %d.\n',i-1,j);
+                        % fprintf('   Interpolated axial with pre. Vol %d, Slice %d.\n',i-1,j);
                         fprintf(logID,'   Interpolated axial with pre. Vol %d, Slice %d.\n',i-1,j);
 
 
@@ -478,7 +478,7 @@ for i = 3:nscans
                         % if slice is first or adjacent of next volume is bad
                         % addvalue=0 and slice will be equal to post in time
                         Yn2(:,:,j) = squeeze(Y4(3,:,:,j)) + addvalue;        % set to post + calculated change from adjacent slice
-                        fprintf('   Interpolated axial with post. Vol %d, Slice %d.\n',i-1,j);
+                        % fprintf('   Interpolated axial with post. Vol %d, Slice %d.\n',i-1,j);
                         fprintf(logID,'   Interpolated axial with post. Vol %d, Slice %d.\n',i-1,j);
 
 
@@ -496,12 +496,12 @@ for i = 3:nscans
                         end
 
                         Yn2(:,:,j) = LastGoodVol(:,:,j) + addvalue;          % set to last good known slice + value of change
-                        fprintf('   Interpolated axial with latest good one. Vol %d, Slice %d.\n',i-1,j);
+                        % fprintf('   Interpolated axial with latest good one. Vol %d, Slice %d.\n',i-1,j);
                         fprintf(logID,'   Replaced axial with latest good one. Vol %d, Slice %d.\n',i-1,j);
 
                     else                                                        % pre good, post good
                         Yn2(:,:,j) = squeeze((Y4(1,:,:,j) + Y4(3,:,:,j))/2.0);  % interpolate pre and post
-                        fprintf('   Interpolated axial. Vol %d, Slice %d.\n',i-1,j);
+                        % fprintf('   Interpolated axial. Vol %d, Slice %d.\n',i-1,j);
                         fprintf(logID,'   Interpolated axial. Vol %d, Slice %d.\n',i-1,j);
 
                     end

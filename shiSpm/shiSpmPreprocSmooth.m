@@ -25,7 +25,7 @@ if ~exist('Prefix','var') || isempty(Prefix)
 end
 
 [pth,nme,ext] = shiFileParts(Img);
-outImg = shiStrConcat(pth,filesep,Prefix,nme,ext);
+outImg = fullfile(pth,shiStrConcat(Prefix,nme,ext));
 
 if ~exist('existAction','var') || isempty(existAction)
     existAction = 'ask';

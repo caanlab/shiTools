@@ -164,7 +164,7 @@ for i = 1:size(Y,1)
 end
 if ~strcmpi(ext,'.img')
     [zpth,znme] = shiFileParts(ZNAME);
-    ZNAME2 = shiStrConcat(zpth,filesep,znme,'.hdr');
+    ZNAME2 = fullfile(zpth,shiStrConcat(znme,'.hdr'));
     for i = 1:size(Y,1)
         delete(ZNAME2{i});
     end

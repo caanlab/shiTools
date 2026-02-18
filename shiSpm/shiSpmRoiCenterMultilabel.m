@@ -10,7 +10,7 @@ function [XYZ,NodeValue,NodeName] = shiSpmRoiCenterMultilabel(AtlasName,NodeValu
 
 
 
-if ismember(AtlasName,shiSpmAnatLabel) && (~exist('NodeList','var') || isempty(LabelListTxtFile))
+if ismember(AtlasName,shiSpmAnatLabel) && (~exist('LabelListTxtFile','var') || isempty(LabelListTxtFile))
     LabelListTxtFile = which(['shiSpmTemplate_',AtlasName,'_Label.txt']);
     AtlasName0 = which(['shiSpmTemplate_',AtlasName,'.img']);
     if isempty(AtlasName0)

@@ -12,7 +12,7 @@ function [outImg,matlabbatch] = shiSpmPreprocSliceTime(Img,Tr,Ta,SliceOrder,RefS
 %   SliceOrder          - slice order or slice time in millisecond
 %   RefSlice            - reference slice for slice timing (spatial slice index or slice time in millisecond)
 %
-% Zhenhao Shi, 2025-4-5
+% Zhenhao Shi, 2025-5-13
 %
 
 
@@ -22,7 +22,7 @@ if ~exist('Prefix','var') || isempty(Prefix)
 end
 
 [pth,nme,ext] = shiFileParts(Img);
-outImg = shiStrConcat(pth,filesep,Prefix,nme,ext);
+outImg = fullfile(pth,shiStrConcat(Prefix,nme,ext));
 
 if (~exist('RefSlice','var')||isempty(RefSlice)) && (~exist('SliceOrder','var')||isempty(SliceOrder))
     fprintf('\nWARNING:\n    Slice Timing: no slice info provided, skipping and simply copying images...\n\n');
@@ -55,8 +55,9 @@ end
 
 nSlices = numel(SliceOrder);
 
-if ~isequal(1:numel(SliceOrder),sort(SliceOrder))
+if ~isequal((1:numel(SliceOrder))',sort(SliceOrder(:)))
     unit = 'slice times';
+    Ta = 0;
 else
     unit = 'slice indices';
     if ~exist('Ta','var')||isempty(Ta)

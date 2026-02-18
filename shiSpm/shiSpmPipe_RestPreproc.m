@@ -1,11 +1,11 @@
 function shiSpmPipe_RestPreproc(xStepInd,anat,func,atlas,CustomCov,CustomSpike, varargin)
 %
-% resting-state data preprocessing pipeline
+% runs resting-state data preprocessing using a customized pipeline
 %
 %  shiSpmPipe_RestPreproc(xStepInd,anat,func,atlas,CustomCov,CustomSpike, xTr,xSlice_Ta,xSlice_Order,xSlice_Ref,xDvars_do,xDespike_Method,xInterpolate_Method,xNormalize_VoxelSize)
 %  shiSpmPipe_RestPreproc(xStepInd,anat,func,atlas,CustomCov,CustomSpike, xPARAM_STRUCT)
 %
-%     xStepInd % leave empty for 1:178
+%     xStepInd
 %     anat
 %     func
 %     atlas
@@ -19,6 +19,8 @@ function shiSpmPipe_RestPreproc(xStepInd,anat,func,atlas,CustomCov,CustomSpike, 
 %     xDespike_Method = shiIf(~exist('xDespike_Method','var')||isempty(xDespike_Method), '', xDespike_Method); % leave empty for default AFNI '3dDespike', or specify 'ArtRepair'
 %     xInterpolate_Method = shiIf(~exist('xInterpolate_Method','var')||isempty(xInterpolate_Method), '', xInterpolate_Method); % leave empty for default 'Lomb' (Lomb-Scargle periodogram), or enter method for interp1.m ('linear', 'cubic', 'spline', etc)
 %     xNormalize_VoxelSize = shiIf(~exist('xNormalize_VoxelSize','var')||isempty(xNormalize_VoxelSize), [], xNormalize_VoxelSize); % leave empty for default [3 3 3] (mm)
+%
+%  Zhenhao Shi 2025-5-21
 
 %% variable naming in this script:
 %       xxAbcXyz        : temporary variables that are not tracked
@@ -32,7 +34,7 @@ if nargin==0
 end
 
 if isempty(xStepInd)
-    xStepInd = 1:178;
+    error('run shiSpmPipe_RestPreproc_WrapperGen to determine preproc steps');
 end
 
 %% ========================================================================
@@ -87,6 +89,8 @@ if nargin < 7 || ~isstruct(varargin{1}) % for backward compatibility
     xMotion_AbsMotOption   = [];
     xMotion_FdOption       = [];
     xMotion_FdSpikeThres   = [];
+    xSegment_Method        = [];
+    xDebone_Method         = [];
     xDebone_Expr           = [];
     xErode_Keep            = [];
     xDvars_SpikeThres      = [];
@@ -113,6 +117,8 @@ elseif isstruct(varargin{1})
     try xMotion_AbsMotOption   = xPARAM.xMotion_AbsMotOption   ; catch, warning('unspecified parameter: %s', 'xMotion_AbsMotOption  '); xMotion_AbsMotOption   = []; end
     try xMotion_FdOption       = xPARAM.xMotion_FdOption       ; catch, warning('unspecified parameter: %s', 'xMotion_FdOption      '); xMotion_FdOption       = []; end
     try xMotion_FdSpikeThres   = xPARAM.xMotion_FdSpikeThres   ; catch, warning('unspecified parameter: %s', 'xMotion_FdSpikeThres  '); xMotion_FdSpikeThres   = []; end
+    try xSegment_Method        = xPARAM.xSegment_Method        ; catch, warning('unspecified parameter: %s', 'xSegment_Method       '); xSegment_Method        = []; end
+    try xDebone_Method         = xPARAM.xDebone_Method         ; catch, warning('unspecified parameter: %s', 'xDebone_Method        '); xDebone_Method         = []; end
     try xDebone_Expr           = xPARAM.xDebone_Expr           ; catch, warning('unspecified parameter: %s', 'xDebone_Expr          '); xDebone_Expr           = []; end
     try xErode_Keep            = xPARAM.xErode_Keep            ; catch, warning('unspecified parameter: %s', 'xErode_Keep           '); xErode_Keep            = []; end
     try xDvars_SpikeThres      = xPARAM.xDvars_SpikeThres      ; catch, warning('unspecified parameter: %s', 'xDvars_SpikeThres     '); xDvars_SpikeThres      = []; end
@@ -136,6 +142,8 @@ elseif isstruct(varargin{1})
         'xMotion_AbsMotOption'
         'xMotion_FdOption'
         'xMotion_FdSpikeThres'
+        'xSegment_Method'
+        'xDebone_Method'
         'xDebone_Expr'
         'xErode_Keep'
         'xDvars_SpikeThres'
@@ -152,7 +160,7 @@ elseif isstruct(varargin{1})
 
 else
 
-    error('unknown input format; 7th input should be either TR (followed by other parameters; see Line 4) or be a structure of all parameters (see Line 5)')
+    error('unknown input format; 7th input should be either TR (followed by other parameters; see Line 5) or be a structure of all parameters (see Line 6)')
 
 end
 
@@ -166,25 +174,20 @@ assert(isscalar(xTr)&&xTr>0, 'must specify TR');
 xMotion_AbsMotOption = shiIf(isempty(xMotion_AbsMotOption), [], xMotion_AbsMotOption); % leave empty for default 'Abs_Jenkinson', or specify 'Abs_Power' (see shiSpmPreprocMotCalc)
 xMotion_FdOption = shiIf(isempty(xMotion_FdOption), [], xMotion_FdOption); % leave empty for default 'Fd_Jenkinson', or specify 'Fd_Power' (see shiSpmPreprocMotCalc)
 xMotion_FdSpikeThres = shiIf(isempty(xMotion_FdSpikeThres), [], xMotion_FdSpikeThres); % leave empty for default 0.5;
-Mot24 = 'Mot24';
-AbsMot = 'AbsMot';
-Fd = 'Fd';
-SpikeFd = 'SpikeFd';
 
 % [C] Adjust for slice timing
 xSlice_Ta = shiIf(isempty(xSlice_Ta), [], xSlice_Ta); % the TA parameter in slice timing; leave empty for default TR-TR/nSlice for slice indices; ignored for slice times
 xSlice_Order = shiIf(isempty(xSlice_Order), [], xSlice_Order); % specify slice indices or slice times (ms); leave empty to skip slice-timing and just copy-paste images
 xSlice_Ref = shiIf(isempty(xSlice_Ref), [], xSlice_Ref); % leave empty to use mid-TR as reference, or specify one slice in the same format as in slice order
-a = 'a';
 
 % [D] Realign to correct motion
-r = 'r';
 
 % [E] Coregister and segment
+xSegment_Method = shiIf(isempty(xSegment_Method), [], xSegment_Method); % leave empty for default 'cat' (CAT12), or specify 'spm' (SPM12/SPM25)
 
 % [G] Debone by removing regions that are not c1, c2 or c3
-xDebone_Expr = shiIf(isempty(xDebone_Expr), [], xDebone_Expr); % leave empty for default 'i1+i2+i3>0.5' (FSL), or specify 'i1+i2>0.2' (SPM), or specify custom expression (see shiSpmPreprocSkullStrip)
-b = 'b';
+xDebone_Method = shiIf(isempty(xDebone_Method), [], xDebone_Method); % leave empty for default 'c0', or specify 'c123' (see shiSpmPreprocDebone)
+xDebone_Expr = shiIf(isempty(xDebone_Expr), [], xDebone_Expr); % leave empty for 'i1+i2+i3>0.5' (FSL, default for 'c123') and 'i1>0' (default for 'c0'), or specify 'i1+i2>0.2' (SPM, for 'c123'), or specify custom expression (see shiSpmPreprocDebone)
 
 % [U] Reslice tissue probability maps to functional space
 
@@ -196,62 +199,44 @@ xErode_Keep = shiIf(isempty(xErode_Keep), [], xErode_Keep); % leave empty for de
 % [H] [RECOMMENDED] Compute initial DVARS and DVARS spikes
 xDvars_do = shiIf(isempty(xDvars_do), true, xDvars_do); % leave empty for default true
 xDvars_SpikeThres = shiIf(isempty(xDvars_SpikeThres), [], xDvars_SpikeThres); % leave empty to use FWE-pDVARS<0.05 & delta%D-var>5% (per Afyouni & Nichols, 2018 NeuroImage), or specify an absolute DVARS threshold (e.g. 2) (see shiSpmPreprocDvarsCalc)
-Dvars = 'Dvars';
-SpikeDvars = 'SpikeDvars';
 
 % [I] [RECOMMENDED] Despike voxel by voxel
 xDespike_Method = shiIf(isempty(xDespike_Method), [], xDespike_Method); % leave empty for default AFNI '3dDespike', or specify 'ArtRepair'
 xDespike_Parameter = shiIf(isempty(xDespike_Parameter), [], xDespike_Parameter); % {c1,c2,cOrder} for 3dDespike (leave empty for default = {2.5, 4.0, nImg/30}), or {WinSize,Thres} for ArtRepair (leave empty for default = {17, 4}, WinSize must be odd integer)
-k = 'k';
 
 % [J] Detrend
 xDetrend_Order = shiIf(isempty(xDetrend_Order), [], xDetrend_Order); % leave empty for default round(1+xTr*length(func)/150)
-d = 'd';
-%%%% prefix Mean will be the same as in [D] realign, HARDWIRED
 
 % [K] Extract global, WM and CSF signals
-Nui2 = 'Nui2';
-Nui3 = 'Nui3';
 
 % [L] [RECOMMENDED] Interpolate spike timepoints [RECOMMENDED OVER CENSORING. see [P]]
 xInterpolate_Method = shiIf(isempty(xInterpolate_Method), [], xInterpolate_Method); % leave empty for default 'Lomb' (Lomb-Scargle periodogram), or specify method for interp1.m ('linear', 'cubic', 'spline', etc)
-l = 'l';
 
 % [M] Filter images
 % [N] Filter covariates
 xFilter_HighCutoff = shiIf(isempty(xFilter_HighCutoff), [], xFilter_HighCutoff); % leave empty for default 0.01
 xFilter_LowCutoff = shiIf(isempty(xFilter_LowCutoff), [], xFilter_LowCutoff); % leave empty for default 0.1
 xFilter_CustCovFiltInd = shiIf(isempty(xFilter_CustCovFiltInd), [], xFilter_CustCovFiltInd); % leave empty for default filtering all custom covariates, or 1 * nCov vector of TRUE/FALSE indicating which ones to be filtered
-f = 'f';
 
 % [O] Regress out covariates
-v2 = 'v2';
-v3 = 'v3';
 
 % [P] [OPTIONAL] Mark spike images for censoring [ONLY IF NOT INTERPOLATED ALREADY. INTERPOLATION RECOMMENDED. see [L]]
-Censor = 'Censor';
 
 % [Q] [RECOMMENDED] Smooth
-s4 = 's4';
-s8 = 's8';
 
 % [R] [RECOMMENDED] Normalize
 xNormalize_VoxelSize = shiIf(isempty(xNormalize_VoxelSize), [], xNormalize_VoxelSize); % leave empty for default [3 3 3] (mm)
-w = 'w';
 
 % [S] Unwarp atlases
-u = 'u';
 
 % [T] Extract time series and compute adjacency matrix
 xAdjMat_XtrSummFunc = shiIf(isempty(xAdjMat_XtrSummFunc), [], xAdjMat_XtrSummFunc); % leave empty for default 'mean', or specify 'med' or 'eig'
 xAdjMat_CorrMethod = shiIf(isempty(xAdjMat_CorrMethod), [], xAdjMat_CorrMethod); % leave empty for default 'pearson' (same as @(x)atanh(corr(x,'type','pearson')), or specify similarly 'spearman', or any function handle
-Adj = 'Adj';
 
 % [W] Compute final DVARS
-%%%% all inputs will be the same as in [H] (initial DVARS)
 
 % [X] Preproc summary
-PreprocSumm = 'PreprocSumm';
+
 
 
 %% ========================================================================
@@ -265,285 +250,323 @@ PreprocSumm = 'PreprocSumm';
 % end
 
 atlas       = shiStrConcat('atlas_',atlas);
-func1       = func{1}     ;
-m           = 'm'         ;
-c1          = 'c1'        ;
-c2          = 'c2'        ;
-c3          = 'c3'        ;
-rc1         = 'rc1'       ;
-rc2         = 'rc2'       ;
-rc3         = 'rc3'       ;
-ec1         = 'ec1'       ;
-ec2         = 'ec2'       ;
-ec3         = 'ec3'       ;
-iy          = 'iy'        ;
-MaskDebone  = 'MaskDebone';
-Mean        = 'Mean'      ;
-Resliced    = 'Resliced'  ;
-Rp          = 'Rp'        ;
-Spike       = 'Spike'     ;
-Spm         = 'Spm'       ;
-TisDep      = 'TisDep'    ;
-TisLab      = 'TisLab'    ;
-Underline   = '_'         ;
-y           = 'y'         ;
-BiasField   = 'BiasField' ;
-seg8        = 'seg8'      ;
-label       = 'label'     ;
+func1       = func{1}       ;
+a           = 'a'           ; % slice time corrected
+b           = 'b'           ; % skull stripped
+c0          = 'c0'          ; % tissue class
+c1          = 'c1'          ; % gray matter probability
+c2          = 'c2'          ; % white matter probability
+c3          = 'c3'          ; % CSF probability
+d           = 'd'           ; % detrended
+ec1         = 'ec1'         ; % eroded gray matter
+ec2         = 'ec2'         ; % eroded white matter
+ec3         = 'ec3'         ; % eroded CSF
+f           = 'f'           ; % filtered
+iy          = 'iy'          ; % inverse normalization transform
+k           = 'k'           ; % despiked
+l           = 'l'           ; % spike-interpolated
+label       = 'label'       ; % 
+m           = 'm'           ; % modulated
+r           = 'r'           ; % realigned/resliced
+s4          = 's4'          ; % smoothed with 4-mm FWHM
+s8          = 's8'          ; % smoothed with 4-mm FWHM
+seg8        = 'seg8'        ; % segmentation parameter
+u           = 'u'           ; % un-normalized to native space
+v2          = 'v2'          ; % adjusted for white matter and CSF signals
+v3          = 'v3'          ; % adjusted for whole-brain, white matter, and CSF signals
+w           = 'w'           ; % normalized
+wj          = 'wj'          ; % normalized jacobian
+y           = 'y'           ; % forward normalization transform
+AbsMot      = 'AbsMot'      ;
+Adj         = 'Adj'         ;
+BiasField   = 'BiasField'   ;
+CatMat      = 'CatMat'      ;
+CatXml      = 'CatXml'      ;
+CatReport   = 'CatReport'   ;
+CatIqr      = 'CatIqr'      ;
+CatTiv      = 'CatTiv'      ;
+Censor      = 'Censor'      ;
+Dvars       = 'Dvars'       ;
+Fd          = 'Fd'          ;
+MaskDebone  = 'MaskDebone'  ;
+Mean        = 'Mean'        ;
+Mot24       = 'Mot24'       ;
+Nui2        = 'Nui2'        ;
+Nui3        = 'Nui3'        ;
+PreprocSumm = 'PreprocSumm' ;
+Resliced    = 'Resliced'    ;
+Rp          = 'Rp'          ;
+Spike       = 'Spike'       ;
+SpikeDvars  = 'SpikeDvars'  ;
+SpikeFd     = 'SpikeFd'     ;
+Spm         = 'Spm'         ;
+TisDep      = 'TisDep'      ;
+TisLab      = 'TisLab'      ;
+Underline   = '_'           ;
 
 nii = '.nii';
 txt = '.txt';
 mat = '.mat';
+xml = '.xml';
+pdf = '.pdf';
 
-ANAT = shiStrConcat( pth, filesep, anat, nii);
-FUNC = shiStrConcat( pth, filesep, func, nii);
-ATLAS = shiStrConcat( pth, filesep, atlas, nii);
-ATLAS_LABEL = shiStrConcat( pth, filesep, atlas,Underline,label, txt );
-CUSTOMCOV = shiIf( ~isempty(CustomCov), shiStrConcat( pth, filesep, CustomCov, txt ), {} );
-CUSTOMSPIKE = shiIf( ~isempty(CustomSpike), shiStrConcat( pth, filesep, CustomSpike, txt ), {} );
+ANAT        = fullfile(pth, shiStrConcat( anat , nii ));
+FUNC        = fullfile(pth, shiStrConcat( func , nii ));
+ATLAS       = fullfile(pth, shiStrConcat( atlas, nii ));
+ATLAS_LABEL = fullfile(pth, shiStrConcat( atlas,Underline,label, txt ));
+CUSTOMCOV   = shiIf( ~isempty(CustomCov  ), fullfile(pth, shiStrConcat( CustomCov  , txt )), {} );
+CUSTOMSPIKE = shiIf( ~isempty(CustomSpike), fullfile(pth, shiStrConcat( CustomSpike, txt )), {} );
 
-manat                      =                             shiStrConcat( pth, filesep, m,anat                                                    , nii );
-wanat                      =                             shiStrConcat( pth, filesep, w,anat                                                    , nii );
-wmanat                     =                             shiStrConcat( pth, filesep, w,m,anat                                                  , nii );
-c1anat                     =                             shiStrConcat( pth, filesep, c1,anat                                                   , nii );
-c2anat                     =                             shiStrConcat( pth, filesep, c2,anat                                                   , nii );
-c3anat                     =                             shiStrConcat( pth, filesep, c3,anat                                                   , nii );
-wc1anat                    =                             shiStrConcat( pth, filesep, w,c1,anat                                                 , nii );
-wc2anat                    =                             shiStrConcat( pth, filesep, w,c2,anat                                                 , nii );
-wc3anat                    =                             shiStrConcat( pth, filesep, w,c3,anat                                                 , nii );
-mwc1anat                   =                             shiStrConcat( pth, filesep, m,w,c1,anat                                               , nii );
-mwc2anat                   =                             shiStrConcat( pth, filesep, m,w,c2,anat                                               , nii );
-mwc3anat                   =                             shiStrConcat( pth, filesep, m,w,c3,anat                                               , nii );
-rc1anat                    =                             shiStrConcat( pth, filesep, rc1,anat                                                  , nii );
-rc2anat                    =                             shiStrConcat( pth, filesep, rc2,anat                                                  , nii );
-rc3anat                    =                             shiStrConcat( pth, filesep, rc3,anat                                                  , nii );
-Resliced_c1anat            =                             shiStrConcat( pth, filesep, Resliced,Underline,c1,anat                                , nii );
-Resliced_c2anat            =                             shiStrConcat( pth, filesep, Resliced,Underline,c2,anat                                , nii );
-Resliced_c3anat            =                             shiStrConcat( pth, filesep, Resliced,Underline,c3,anat                                , nii );
-TisDep_Resliced_c1anat     =                             shiStrConcat( pth, filesep, TisDep,Underline,Resliced,Underline,c1,anat               , nii );
-TisLab_Resliced_c1anat     =                             shiStrConcat( pth, filesep, TisLab,Underline,Resliced,Underline,c1,anat               , nii );
-ec1_TisDep_Resliced_c1anat =                             shiStrConcat( pth, filesep, ec1,Underline,TisDep,Underline,Resliced,Underline,c1,anat , nii );
-ec2_TisDep_Resliced_c1anat =                             shiStrConcat( pth, filesep, ec2,Underline,TisDep,Underline,Resliced,Underline,c1,anat , nii );
-ec3_TisDep_Resliced_c1anat =                             shiStrConcat( pth, filesep, ec3,Underline,TisDep,Underline,Resliced,Underline,c1,anat , nii );
-y_anat                     =                             shiStrConcat( pth, filesep, y,Underline,anat                                          , nii );
-iy_anat                    =                             shiStrConcat( pth, filesep, iy,Underline,anat                                         , nii );
-anat_seg8                  =                             shiStrConcat( pth, filesep, anat,Underline,seg8                                       , mat );
-BiasField_anat             =                             shiStrConcat( pth, filesep, BiasField,Underline,anat                                  , nii );
-uatlas                     =                             shiStrConcat( pth, filesep, u,atlas                                                   , nii );
-MaskDebone_rafunc1         =                             shiStrConcat( pth, filesep, MaskDebone,Underline,r,a,func1                            , nii );
-Resliced_brafunc1          =                             shiStrConcat( pth, filesep, Resliced,Underline,b,r,a,func1                            , nii );
-Mean_func1                 =                             shiStrConcat( pth, filesep, Mean,Underline,func1                                      , nii );
-Mean_afunc1                =                             shiStrConcat( pth, filesep, Mean,Underline,a,func1                                    , nii );
-Mean_brafunc1              =                             shiStrConcat( pth, filesep, Mean,Underline,b,r,a,func1                                , nii );
-Mean_kbrafunc1             =                             shiStrConcat( pth, filesep, Mean,Underline,k,b,r,a,func1                              , nii );
-Adj_v2dbrafunc1_uatlas     =                             shiStrConcat( pth, filesep, Adj,Underline,v2,d,b,r,a,func1,Underline,u,atlas          , mat );
-Adj_v2dkbrafunc1_uatlas    =                             shiStrConcat( pth, filesep, Adj,Underline,v2,d,k,b,r,a,func1,Underline,u,atlas        , mat );
-Adj_v2fdbrafunc1_uatlas    =                             shiStrConcat( pth, filesep, Adj,Underline,v2,f,d,b,r,a,func1,Underline,u,atlas        , mat );
-Adj_v2fdkbrafunc1_uatlas   =                             shiStrConcat( pth, filesep, Adj,Underline,v2,f,d,k,b,r,a,func1,Underline,u,atlas      , mat );
-Adj_v2fldbrafunc1_uatlas   =                             shiStrConcat( pth, filesep, Adj,Underline,v2,f,l,d,b,r,a,func1,Underline,u,atlas      , mat );
-Adj_v2fldkbrafunc1_uatlas  =                             shiStrConcat( pth, filesep, Adj,Underline,v2,f,l,d,k,b,r,a,func1,Underline,u,atlas    , mat );
-Adj_v2ldbrafunc1_uatlas    =                             shiStrConcat( pth, filesep, Adj,Underline,v2,l,d,b,r,a,func1,Underline,u,atlas        , mat );
-Adj_v2ldkbrafunc1_uatlas   =                             shiStrConcat( pth, filesep, Adj,Underline,v2,l,d,k,b,r,a,func1,Underline,u,atlas      , mat );
-Adj_v3dbrafunc1_uatlas     =                             shiStrConcat( pth, filesep, Adj,Underline,v3,d,b,r,a,func1,Underline,u,atlas          , mat );
-Adj_v3dkbrafunc1_uatlas    =                             shiStrConcat( pth, filesep, Adj,Underline,v3,d,k,b,r,a,func1,Underline,u,atlas        , mat );
-Adj_v3fdbrafunc1_uatlas    =                             shiStrConcat( pth, filesep, Adj,Underline,v3,f,d,b,r,a,func1,Underline,u,atlas        , mat );
-Adj_v3fdkbrafunc1_uatlas   =                             shiStrConcat( pth, filesep, Adj,Underline,v3,f,d,k,b,r,a,func1,Underline,u,atlas      , mat );
-Adj_v3fldbrafunc1_uatlas   =                             shiStrConcat( pth, filesep, Adj,Underline,v3,f,l,d,b,r,a,func1,Underline,u,atlas      , mat );
-Adj_v3fldkbrafunc1_uatlas  =                             shiStrConcat( pth, filesep, Adj,Underline,v3,f,l,d,k,b,r,a,func1,Underline,u,atlas    , mat );
-Adj_v3ldbrafunc1_uatlas    =                             shiStrConcat( pth, filesep, Adj,Underline,v3,l,d,b,r,a,func1,Underline,u,atlas        , mat );
-Adj_v3ldkbrafunc1_uatlas   =                             shiStrConcat( pth, filesep, Adj,Underline,v3,l,d,k,b,r,a,func1,Underline,u,atlas      , mat );
-Dvars_brafunc1             = shiIf( xDvars_do,           shiStrConcat( pth, filesep, Dvars,Underline,b,r,a,func1                               , txt ), {} );
-Dvars_v2dbrafunc1          =                             shiStrConcat( pth, filesep, Dvars,Underline,v2,d,b,r,a,func1                          , txt );
-Dvars_v2dkbrafunc1         =                             shiStrConcat( pth, filesep, Dvars,Underline,v2,d,k,b,r,a,func1                        , txt );
-Dvars_v2fdbrafunc1         =                             shiStrConcat( pth, filesep, Dvars,Underline,v2,f,d,b,r,a,func1                        , txt );
-Dvars_v2fdkbrafunc1        =                             shiStrConcat( pth, filesep, Dvars,Underline,v2,f,d,k,b,r,a,func1                      , txt );
-Dvars_v2fldbrafunc1        =                             shiStrConcat( pth, filesep, Dvars,Underline,v2,f,l,d,b,r,a,func1                      , txt );
-Dvars_v2fldkbrafunc1       =                             shiStrConcat( pth, filesep, Dvars,Underline,v2,f,l,d,k,b,r,a,func1                    , txt );
-Dvars_v2ldbrafunc1         =                             shiStrConcat( pth, filesep, Dvars,Underline,v2,l,d,b,r,a,func1                        , txt );
-Dvars_v2ldkbrafunc1        =                             shiStrConcat( pth, filesep, Dvars,Underline,v2,l,d,k,b,r,a,func1                      , txt );
-Dvars_v3dbrafunc1          =                             shiStrConcat( pth, filesep, Dvars,Underline,v3,d,b,r,a,func1                          , txt );
-Dvars_v3dkbrafunc1         =                             shiStrConcat( pth, filesep, Dvars,Underline,v3,d,k,b,r,a,func1                        , txt );
-Dvars_v3fdbrafunc1         =                             shiStrConcat( pth, filesep, Dvars,Underline,v3,f,d,b,r,a,func1                        , txt );
-Dvars_v3fdkbrafunc1        =                             shiStrConcat( pth, filesep, Dvars,Underline,v3,f,d,k,b,r,a,func1                      , txt );
-Dvars_v3fldbrafunc1        =                             shiStrConcat( pth, filesep, Dvars,Underline,v3,f,l,d,b,r,a,func1                      , txt );
-Dvars_v3fldkbrafunc1       =                             shiStrConcat( pth, filesep, Dvars,Underline,v3,f,l,d,k,b,r,a,func1                    , txt );
-Dvars_v3ldbrafunc1         =                             shiStrConcat( pth, filesep, Dvars,Underline,v3,l,d,b,r,a,func1                        , txt );
-Dvars_v3ldkbrafunc1        =                             shiStrConcat( pth, filesep, Dvars,Underline,v3,l,d,k,b,r,a,func1                      , txt );
-SpikeDvars_brafunc1        = shiIf( xDvars_do,           shiStrConcat( pth, filesep, Spike,Dvars,Underline,b,r,a,func1                         , txt ), {} );
-SpikeDvars_v2dbrafunc1     =                             shiStrConcat( pth, filesep, Spike,Dvars,Underline,v2,d,b,r,a,func1                    , txt );
-SpikeDvars_v2dkbrafunc1    =                             shiStrConcat( pth, filesep, Spike,Dvars,Underline,v2,d,k,b,r,a,func1                  , txt );
-SpikeDvars_v2fdbrafunc1    =                             shiStrConcat( pth, filesep, Spike,Dvars,Underline,v2,f,d,b,r,a,func1                  , txt );
-SpikeDvars_v2fdkbrafunc1   =                             shiStrConcat( pth, filesep, Spike,Dvars,Underline,v2,f,d,k,b,r,a,func1                , txt );
-SpikeDvars_v2fldbrafunc1   =                             shiStrConcat( pth, filesep, Spike,Dvars,Underline,v2,f,l,d,b,r,a,func1                , txt );
-SpikeDvars_v2fldkbrafunc1  =                             shiStrConcat( pth, filesep, Spike,Dvars,Underline,v2,f,l,d,k,b,r,a,func1              , txt );
-SpikeDvars_v2ldbrafunc1    =                             shiStrConcat( pth, filesep, Spike,Dvars,Underline,v2,l,d,b,r,a,func1                  , txt );
-SpikeDvars_v2ldkbrafunc1   =                             shiStrConcat( pth, filesep, Spike,Dvars,Underline,v2,l,d,k,b,r,a,func1                , txt );
-SpikeDvars_v3dbrafunc1     =                             shiStrConcat( pth, filesep, Spike,Dvars,Underline,v3,d,b,r,a,func1                    , txt );
-SpikeDvars_v3dkbrafunc1    =                             shiStrConcat( pth, filesep, Spike,Dvars,Underline,v3,d,k,b,r,a,func1                  , txt );
-SpikeDvars_v3fdbrafunc1    =                             shiStrConcat( pth, filesep, Spike,Dvars,Underline,v3,f,d,b,r,a,func1                  , txt );
-SpikeDvars_v3fdkbrafunc1   =                             shiStrConcat( pth, filesep, Spike,Dvars,Underline,v3,f,d,k,b,r,a,func1                , txt );
-SpikeDvars_v3fldbrafunc1   =                             shiStrConcat( pth, filesep, Spike,Dvars,Underline,v3,f,l,d,b,r,a,func1                , txt );
-SpikeDvars_v3fldkbrafunc1  =                             shiStrConcat( pth, filesep, Spike,Dvars,Underline,v3,f,l,d,k,b,r,a,func1              , txt );
-SpikeDvars_v3ldbrafunc1    =                             shiStrConcat( pth, filesep, Spike,Dvars,Underline,v3,l,d,b,r,a,func1                  , txt );
-SpikeDvars_v3ldkbrafunc1   =                             shiStrConcat( pth, filesep, Spike,Dvars,Underline,v3,l,d,k,b,r,a,func1                , txt );
-Rp_func1                   =                             shiStrConcat( pth, filesep, Rp,Underline,func1                                        , txt );
-Rp_afunc1                  =                             shiStrConcat( pth, filesep, Rp,Underline,a,func1                                      , txt );
-AbsMot_Rp_func1            =                             shiStrConcat( pth, filesep, AbsMot,Underline,Rp,Underline,func1                       , txt );
-Fd_Rp_func1                =                             shiStrConcat( pth, filesep, Fd,Underline,Rp,Underline,func1                           , txt );
-SpikeFd_Rp_func1           =                             shiStrConcat( pth, filesep, Spike,Fd,Underline,Rp,Underline,func1                     , txt );
-Mot24_Rp_func1             =                             shiStrConcat( pth, filesep, Mot24,Underline,Rp,Underline,func1                        , txt );
-fMot24_Rp_func1            =                             shiStrConcat( pth, filesep, f,Mot24,Underline,Rp,Underline,func1                      , txt );
-Nui2_dbrafunc1             =                             shiStrConcat( pth, filesep, Nui2,Underline,d,b,r,a,func1                              , txt );
-Nui2_dkbrafunc1            =                             shiStrConcat( pth, filesep, Nui2,Underline,d,k,b,r,a,func1                            , txt );
-Nui3_dbrafunc1             =                             shiStrConcat( pth, filesep, Nui3,Underline,d,b,r,a,func1                              , txt );
-Nui3_dkbrafunc1            =                             shiStrConcat( pth, filesep, Nui3,Underline,d,k,b,r,a,func1                            , txt );
-fNui2_dbrafunc1            =                             shiStrConcat( pth, filesep, f,Nui2,Underline,d,b,r,a,func1                            , txt );
-fNui2_dkbrafunc1           =                             shiStrConcat( pth, filesep, f,Nui2,Underline,d,k,b,r,a,func1                          , txt );
-fNui3_dbrafunc1            =                             shiStrConcat( pth, filesep, f,Nui3,Underline,d,b,r,a,func1                            , txt );
-fNui3_dkbrafunc1           =                             shiStrConcat( pth, filesep, f,Nui3,Underline,d,k,b,r,a,func1                          , txt );
-fCUSTOMCOV                 = shiIf( ~isempty(CustomCov), shiStrConcat( pth, filesep, f,CustomCov                                               , txt ), {} );
-Censor_brafunc1            =                             shiStrConcat( pth, filesep, Censor,Underline,b,r,a,func1                              , txt );
-v2Spm_dbrafunc1            =                             shiStrConcat( pth, filesep, v2,Spm,Underline,d,b,r,a,func1                            , mat );
-v2Spm_dkbrafunc1           =                             shiStrConcat( pth, filesep, v2,Spm,Underline,d,k,b,r,a,func1                          , mat );
-v2Spm_fdbrafunc1           =                             shiStrConcat( pth, filesep, v2,Spm,Underline,f,d,b,r,a,func1                          , mat );
-v2Spm_fdkbrafunc1          =                             shiStrConcat( pth, filesep, v2,Spm,Underline,f,d,k,b,r,a,func1                        , mat );
-v2Spm_fldbrafunc1          =                             shiStrConcat( pth, filesep, v2,Spm,Underline,f,l,d,b,r,a,func1                        , mat );
-v2Spm_fldkbrafunc1         =                             shiStrConcat( pth, filesep, v2,Spm,Underline,f,l,d,k,b,r,a,func1                      , mat );
-v2Spm_ldbrafunc1           =                             shiStrConcat( pth, filesep, v2,Spm,Underline,l,d,b,r,a,func1                          , mat );
-v2Spm_ldkbrafunc1          =                             shiStrConcat( pth, filesep, v2,Spm,Underline,l,d,k,b,r,a,func1                        , mat );
-v3Spm_dbrafunc1            =                             shiStrConcat( pth, filesep, v3,Spm,Underline,d,b,r,a,func1                            , mat );
-v3Spm_dkbrafunc1           =                             shiStrConcat( pth, filesep, v3,Spm,Underline,d,k,b,r,a,func1                          , mat );
-v3Spm_fdbrafunc1           =                             shiStrConcat( pth, filesep, v3,Spm,Underline,f,d,b,r,a,func1                          , mat );
-v3Spm_fdkbrafunc1          =                             shiStrConcat( pth, filesep, v3,Spm,Underline,f,d,k,b,r,a,func1                        , mat );
-v3Spm_fldbrafunc1          =                             shiStrConcat( pth, filesep, v3,Spm,Underline,f,l,d,b,r,a,func1                        , mat );
-v3Spm_fldkbrafunc1         =                             shiStrConcat( pth, filesep, v3,Spm,Underline,f,l,d,k,b,r,a,func1                      , mat );
-v3Spm_ldbrafunc1           =                             shiStrConcat( pth, filesep, v3,Spm,Underline,l,d,b,r,a,func1                          , mat );
-v3Spm_ldkbrafunc1          =                             shiStrConcat( pth, filesep, v3,Spm,Underline,l,d,k,b,r,a,func1                        , mat );
-rfunc                      =                             shiStrConcat( pth, filesep, r,func                                                    , nii );
-afunc                      =                             shiStrConcat( pth, filesep, a,func                                                    , nii );
-rafunc                     =                             shiStrConcat( pth, filesep, r,a,func                                                  , nii );
-brafunc                    =                             shiStrConcat( pth, filesep, b,r,a,func                                                , nii );
-kbrafunc                   =                             shiStrConcat( pth, filesep, k,b,r,a,func                                              , nii );
-dbrafunc                   =                             shiStrConcat( pth, filesep, d,b,r,a,func                                              , nii );
-dkbrafunc                  =                             shiStrConcat( pth, filesep, d,k,b,r,a,func                                            , nii );
-ldbrafunc                  =                             shiStrConcat( pth, filesep, l,d,b,r,a,func                                            , nii );
-ldkbrafunc                 =                             shiStrConcat( pth, filesep, l,d,k,b,r,a,func                                          , nii );
-fdbrafunc                  =                             shiStrConcat( pth, filesep, f,d,b,r,a,func                                            , nii );
-fdkbrafunc                 =                             shiStrConcat( pth, filesep, f,d,k,b,r,a,func                                          , nii );
-fldbrafunc                 =                             shiStrConcat( pth, filesep, f,l,d,b,r,a,func                                          , nii );
-fldkbrafunc                =                             shiStrConcat( pth, filesep, f,l,d,k,b,r,a,func                                        , nii );
-v2dbrafunc                 =                             shiStrConcat( pth, filesep, v2,d,b,r,a,func                                           , nii );
-v2dkbrafunc                =                             shiStrConcat( pth, filesep, v2,d,k,b,r,a,func                                         , nii );
-v2fdbrafunc                =                             shiStrConcat( pth, filesep, v2,f,d,b,r,a,func                                         , nii );
-v2fdkbrafunc               =                             shiStrConcat( pth, filesep, v2,f,d,k,b,r,a,func                                       , nii );
-v2fldbrafunc               =                             shiStrConcat( pth, filesep, v2,f,l,d,b,r,a,func                                       , nii );
-v2fldkbrafunc              =                             shiStrConcat( pth, filesep, v2,f,l,d,k,b,r,a,func                                     , nii );
-v2ldbrafunc                =                             shiStrConcat( pth, filesep, v2,l,d,b,r,a,func                                         , nii );
-v2ldkbrafunc               =                             shiStrConcat( pth, filesep, v2,l,d,k,b,r,a,func                                       , nii );
-v3dbrafunc                 =                             shiStrConcat( pth, filesep, v3,d,b,r,a,func                                           , nii );
-v3dkbrafunc                =                             shiStrConcat( pth, filesep, v3,d,k,b,r,a,func                                         , nii );
-v3fdbrafunc                =                             shiStrConcat( pth, filesep, v3,f,d,b,r,a,func                                         , nii );
-v3fdkbrafunc               =                             shiStrConcat( pth, filesep, v3,f,d,k,b,r,a,func                                       , nii );
-v3fldbrafunc               =                             shiStrConcat( pth, filesep, v3,f,l,d,b,r,a,func                                       , nii );
-v3fldkbrafunc              =                             shiStrConcat( pth, filesep, v3,f,l,d,k,b,r,a,func                                     , nii );
-v3ldbrafunc                =                             shiStrConcat( pth, filesep, v3,l,d,b,r,a,func                                         , nii );
-v3ldkbrafunc               =                             shiStrConcat( pth, filesep, v3,l,d,k,b,r,a,func                                       , nii );
-s4v2dbrafunc               =                             shiStrConcat( pth, filesep, s4,v2,d,b,r,a,func                                        , nii );
-s4v2dkbrafunc              =                             shiStrConcat( pth, filesep, s4,v2,d,k,b,r,a,func                                      , nii );
-s4v2fdbrafunc              =                             shiStrConcat( pth, filesep, s4,v2,f,d,b,r,a,func                                      , nii );
-s4v2fdkbrafunc             =                             shiStrConcat( pth, filesep, s4,v2,f,d,k,b,r,a,func                                    , nii );
-s4v2fldbrafunc             =                             shiStrConcat( pth, filesep, s4,v2,f,l,d,b,r,a,func                                    , nii );
-s4v2fldkbrafunc            =                             shiStrConcat( pth, filesep, s4,v2,f,l,d,k,b,r,a,func                                  , nii );
-s4v2ldbrafunc              =                             shiStrConcat( pth, filesep, s4,v2,l,d,b,r,a,func                                      , nii );
-s4v2ldkbrafunc             =                             shiStrConcat( pth, filesep, s4,v2,l,d,k,b,r,a,func                                    , nii );
-s4v3dbrafunc               =                             shiStrConcat( pth, filesep, s4,v3,d,b,r,a,func                                        , nii );
-s4v3dkbrafunc              =                             shiStrConcat( pth, filesep, s4,v3,d,k,b,r,a,func                                      , nii );
-s4v3fdbrafunc              =                             shiStrConcat( pth, filesep, s4,v3,f,d,b,r,a,func                                      , nii );
-s4v3fdkbrafunc             =                             shiStrConcat( pth, filesep, s4,v3,f,d,k,b,r,a,func                                    , nii );
-s4v3fldbrafunc             =                             shiStrConcat( pth, filesep, s4,v3,f,l,d,b,r,a,func                                    , nii );
-s4v3fldkbrafunc            =                             shiStrConcat( pth, filesep, s4,v3,f,l,d,k,b,r,a,func                                  , nii );
-s4v3ldbrafunc              =                             shiStrConcat( pth, filesep, s4,v3,l,d,b,r,a,func                                      , nii );
-s4v3ldkbrafunc             =                             shiStrConcat( pth, filesep, s4,v3,l,d,k,b,r,a,func                                    , nii );
-s8v2dbrafunc               =                             shiStrConcat( pth, filesep, s8,v2,d,b,r,a,func                                        , nii );
-s8v2dkbrafunc              =                             shiStrConcat( pth, filesep, s8,v2,d,k,b,r,a,func                                      , nii );
-s8v2fdbrafunc              =                             shiStrConcat( pth, filesep, s8,v2,f,d,b,r,a,func                                      , nii );
-s8v2fdkbrafunc             =                             shiStrConcat( pth, filesep, s8,v2,f,d,k,b,r,a,func                                    , nii );
-s8v2fldbrafunc             =                             shiStrConcat( pth, filesep, s8,v2,f,l,d,b,r,a,func                                    , nii );
-s8v2fldkbrafunc            =                             shiStrConcat( pth, filesep, s8,v2,f,l,d,k,b,r,a,func                                  , nii );
-s8v2ldbrafunc              =                             shiStrConcat( pth, filesep, s8,v2,l,d,b,r,a,func                                      , nii );
-s8v2ldkbrafunc             =                             shiStrConcat( pth, filesep, s8,v2,l,d,k,b,r,a,func                                    , nii );
-s8v3dbrafunc               =                             shiStrConcat( pth, filesep, s8,v3,d,b,r,a,func                                        , nii );
-s8v3dkbrafunc              =                             shiStrConcat( pth, filesep, s8,v3,d,k,b,r,a,func                                      , nii );
-s8v3fdbrafunc              =                             shiStrConcat( pth, filesep, s8,v3,f,d,b,r,a,func                                      , nii );
-s8v3fdkbrafunc             =                             shiStrConcat( pth, filesep, s8,v3,f,d,k,b,r,a,func                                    , nii );
-s8v3fldbrafunc             =                             shiStrConcat( pth, filesep, s8,v3,f,l,d,b,r,a,func                                    , nii );
-s8v3fldkbrafunc            =                             shiStrConcat( pth, filesep, s8,v3,f,l,d,k,b,r,a,func                                  , nii );
-s8v3ldbrafunc              =                             shiStrConcat( pth, filesep, s8,v3,l,d,b,r,a,func                                      , nii );
-s8v3ldkbrafunc             =                             shiStrConcat( pth, filesep, s8,v3,l,d,k,b,r,a,func                                    , nii );
-ws4v2dbrafunc              =                             shiStrConcat( pth, filesep, w,s4,v2,d,b,r,a,func                                      , nii );
-ws4v2dkbrafunc             =                             shiStrConcat( pth, filesep, w,s4,v2,d,k,b,r,a,func                                    , nii );
-ws4v2fdbrafunc             =                             shiStrConcat( pth, filesep, w,s4,v2,f,d,b,r,a,func                                    , nii );
-ws4v2fdkbrafunc            =                             shiStrConcat( pth, filesep, w,s4,v2,f,d,k,b,r,a,func                                  , nii );
-ws4v2fldbrafunc            =                             shiStrConcat( pth, filesep, w,s4,v2,f,l,d,b,r,a,func                                  , nii );
-ws4v2fldkbrafunc           =                             shiStrConcat( pth, filesep, w,s4,v2,f,l,d,k,b,r,a,func                                , nii );
-ws4v2ldbrafunc             =                             shiStrConcat( pth, filesep, w,s4,v2,l,d,b,r,a,func                                    , nii );
-ws4v2ldkbrafunc            =                             shiStrConcat( pth, filesep, w,s4,v2,l,d,k,b,r,a,func                                  , nii );
-ws4v3dbrafunc              =                             shiStrConcat( pth, filesep, w,s4,v3,d,b,r,a,func                                      , nii );
-ws4v3dkbrafunc             =                             shiStrConcat( pth, filesep, w,s4,v3,d,k,b,r,a,func                                    , nii );
-ws4v3fdbrafunc             =                             shiStrConcat( pth, filesep, w,s4,v3,f,d,b,r,a,func                                    , nii );
-ws4v3fdkbrafunc            =                             shiStrConcat( pth, filesep, w,s4,v3,f,d,k,b,r,a,func                                  , nii );
-ws4v3fldbrafunc            =                             shiStrConcat( pth, filesep, w,s4,v3,f,l,d,b,r,a,func                                  , nii );
-ws4v3fldkbrafunc           =                             shiStrConcat( pth, filesep, w,s4,v3,f,l,d,k,b,r,a,func                                , nii );
-ws4v3ldbrafunc             =                             shiStrConcat( pth, filesep, w,s4,v3,l,d,b,r,a,func                                    , nii );
-ws4v3ldkbrafunc            =                             shiStrConcat( pth, filesep, w,s4,v3,l,d,k,b,r,a,func                                  , nii );
-ws8v2dbrafunc              =                             shiStrConcat( pth, filesep, w,s8,v2,d,b,r,a,func                                      , nii );
-ws8v2dkbrafunc             =                             shiStrConcat( pth, filesep, w,s8,v2,d,k,b,r,a,func                                    , nii );
-ws8v2fdbrafunc             =                             shiStrConcat( pth, filesep, w,s8,v2,f,d,b,r,a,func                                    , nii );
-ws8v2fdkbrafunc            =                             shiStrConcat( pth, filesep, w,s8,v2,f,d,k,b,r,a,func                                  , nii );
-ws8v2fldbrafunc            =                             shiStrConcat( pth, filesep, w,s8,v2,f,l,d,b,r,a,func                                  , nii );
-ws8v2fldkbrafunc           =                             shiStrConcat( pth, filesep, w,s8,v2,f,l,d,k,b,r,a,func                                , nii );
-ws8v2ldbrafunc             =                             shiStrConcat( pth, filesep, w,s8,v2,l,d,b,r,a,func                                    , nii );
-ws8v2ldkbrafunc            =                             shiStrConcat( pth, filesep, w,s8,v2,l,d,k,b,r,a,func                                  , nii );
-ws8v3dbrafunc              =                             shiStrConcat( pth, filesep, w,s8,v3,d,b,r,a,func                                      , nii );
-ws8v3dkbrafunc             =                             shiStrConcat( pth, filesep, w,s8,v3,d,k,b,r,a,func                                    , nii );
-ws8v3fdbrafunc             =                             shiStrConcat( pth, filesep, w,s8,v3,f,d,b,r,a,func                                    , nii );
-ws8v3fdkbrafunc            =                             shiStrConcat( pth, filesep, w,s8,v3,f,d,k,b,r,a,func                                  , nii );
-ws8v3fldbrafunc            =                             shiStrConcat( pth, filesep, w,s8,v3,f,l,d,b,r,a,func                                  , nii );
-ws8v3fldkbrafunc           =                             shiStrConcat( pth, filesep, w,s8,v3,f,l,d,k,b,r,a,func                                , nii );
-ws8v3ldbrafunc             =                             shiStrConcat( pth, filesep, w,s8,v3,l,d,b,r,a,func                                    , nii );
-ws8v3ldkbrafunc            =                             shiStrConcat( pth, filesep, w,s8,v3,l,d,k,b,r,a,func                                  , nii );
-wv2dbrafunc                =                             shiStrConcat( pth, filesep, w,v2,d,b,r,a,func                                         , nii );
-wv2dkbrafunc               =                             shiStrConcat( pth, filesep, w,v2,d,k,b,r,a,func                                       , nii );
-wv2fdbrafunc               =                             shiStrConcat( pth, filesep, w,v2,f,d,b,r,a,func                                       , nii );
-wv2fdkbrafunc              =                             shiStrConcat( pth, filesep, w,v2,f,d,k,b,r,a,func                                     , nii );
-wv2fldbrafunc              =                             shiStrConcat( pth, filesep, w,v2,f,l,d,b,r,a,func                                     , nii );
-wv2fldkbrafunc             =                             shiStrConcat( pth, filesep, w,v2,f,l,d,k,b,r,a,func                                   , nii );
-wv2ldbrafunc               =                             shiStrConcat( pth, filesep, w,v2,l,d,b,r,a,func                                       , nii );
-wv2ldkbrafunc              =                             shiStrConcat( pth, filesep, w,v2,l,d,k,b,r,a,func                                     , nii );
-wv3dbrafunc                =                             shiStrConcat( pth, filesep, w,v3,d,b,r,a,func                                         , nii );
-wv3dkbrafunc               =                             shiStrConcat( pth, filesep, w,v3,d,k,b,r,a,func                                       , nii );
-wv3fdbrafunc               =                             shiStrConcat( pth, filesep, w,v3,f,d,b,r,a,func                                       , nii );
-wv3fdkbrafunc              =                             shiStrConcat( pth, filesep, w,v3,f,d,k,b,r,a,func                                     , nii );
-wv3fldbrafunc              =                             shiStrConcat( pth, filesep, w,v3,f,l,d,b,r,a,func                                     , nii );
-wv3fldkbrafunc             =                             shiStrConcat( pth, filesep, w,v3,f,l,d,k,b,r,a,func                                   , nii );
-wv3ldbrafunc               =                             shiStrConcat( pth, filesep, w,v3,l,d,b,r,a,func                                       , nii );
-wv3ldkbrafunc              =                             shiStrConcat( pth, filesep, w,v3,l,d,k,b,r,a,func                                     , nii );
-PreprocSumm_v2fldkbrafunc1 =                             shiStrConcat( pth, filesep, PreprocSumm,Underline,v2,f,l,d,k,b,r,a,func1              , mat );
-PreprocSumm_v2fldbrafunc1  =                             shiStrConcat( pth, filesep, PreprocSumm,Underline,v2,f,l,d,b,r,a,func1                , mat );
-PreprocSumm_v2fdkbrafunc1  =                             shiStrConcat( pth, filesep, PreprocSumm,Underline,v2,f,d,k,b,r,a,func1                , mat );
-PreprocSumm_v2fdbrafunc1   =                             shiStrConcat( pth, filesep, PreprocSumm,Underline,v2,f,d,b,r,a,func1                  , mat );
-PreprocSumm_v2ldkbrafunc1  =                             shiStrConcat( pth, filesep, PreprocSumm,Underline,v2,l,d,k,b,r,a,func1                , mat );
-PreprocSumm_v2ldbrafunc1   =                             shiStrConcat( pth, filesep, PreprocSumm,Underline,v2,l,d,b,r,a,func1                  , mat );
-PreprocSumm_v2dkbrafunc1   =                             shiStrConcat( pth, filesep, PreprocSumm,Underline,v2,d,k,b,r,a,func1                  , mat );
-PreprocSumm_v2dbrafunc1    =                             shiStrConcat( pth, filesep, PreprocSumm,Underline,v2,d,b,r,a,func1                    , mat );
-PreprocSumm_v3fldkbrafunc1 =                             shiStrConcat( pth, filesep, PreprocSumm,Underline,v3,f,l,d,k,b,r,a,func1              , mat );
-PreprocSumm_v3fldbrafunc1  =                             shiStrConcat( pth, filesep, PreprocSumm,Underline,v3,f,l,d,b,r,a,func1                , mat );
-PreprocSumm_v3fdkbrafunc1  =                             shiStrConcat( pth, filesep, PreprocSumm,Underline,v3,f,d,k,b,r,a,func1                , mat );
-PreprocSumm_v3fdbrafunc1   =                             shiStrConcat( pth, filesep, PreprocSumm,Underline,v3,f,d,b,r,a,func1                  , mat );
-PreprocSumm_v3ldkbrafunc1  =                             shiStrConcat( pth, filesep, PreprocSumm,Underline,v3,l,d,k,b,r,a,func1                , mat );
-PreprocSumm_v3ldbrafunc1   =                             shiStrConcat( pth, filesep, PreprocSumm,Underline,v3,l,d,b,r,a,func1                  , mat );
-PreprocSumm_v3dkbrafunc1   =                             shiStrConcat( pth, filesep, PreprocSumm,Underline,v3,d,k,b,r,a,func1                  , mat );
-PreprocSumm_v3dbrafunc1    =                             shiStrConcat( pth, filesep, PreprocSumm,Underline,v3,d,b,r,a,func1                    , mat );
+manat                       =                               fullfile( pth, shiStrConcat( m,anat                                                      , nii ));
+wanat                       =                               fullfile( pth, shiStrConcat( w,anat                                                      , nii ));
+wmanat                      =                               fullfile( pth, shiStrConcat( w,m,anat                                                    , nii ));
+c0anat                      =                               fullfile( pth, shiStrConcat( c0,anat                                                     , nii ));
+c1anat                      =                               fullfile( pth, shiStrConcat( c1,anat                                                     , nii ));
+c2anat                      =                               fullfile( pth, shiStrConcat( c2,anat                                                     , nii ));
+c3anat                      =                               fullfile( pth, shiStrConcat( c3,anat                                                     , nii ));
+wc0anat                     =                               fullfile( pth, shiStrConcat( w,c0,anat                                                   , nii ));
+wc1anat                     =                               fullfile( pth, shiStrConcat( w,c1,anat                                                   , nii ));
+wc2anat                     =                               fullfile( pth, shiStrConcat( w,c2,anat                                                   , nii ));
+wc3anat                     =                               fullfile( pth, shiStrConcat( w,c3,anat                                                   , nii ));
+mwc1anat                    =                               fullfile( pth, shiStrConcat( m,w,c1,anat                                                 , nii ));
+mwc2anat                    =                               fullfile( pth, shiStrConcat( m,w,c2,anat                                                 , nii ));
+mwc3anat                    =                               fullfile( pth, shiStrConcat( m,w,c3,anat                                                 , nii ));
+rc1anat                     =                               fullfile( pth, shiStrConcat( r,c1,anat                                                   , nii ));
+rc2anat                     =                               fullfile( pth, shiStrConcat( r,c2,anat                                                   , nii ));
+rc3anat                     =                               fullfile( pth, shiStrConcat( r,c3,anat                                                   , nii ));
+wjanat                      =                               fullfile( pth, shiStrConcat( wj,anat                                                     , nii ));
+CatMat_anat                 =                               fullfile( pth, shiStrConcat( CatMat,Underline,anat                                       , mat ));
+CatXml_anat                 =                               fullfile( pth, shiStrConcat( CatXml,Underline,anat                                       , xml ));
+CatIqr_anat                 =                               fullfile( pth, shiStrConcat( CatIqr,Underline,anat                                       , txt ));
+CatTiv_anat                 =                               fullfile( pth, shiStrConcat( CatTiv,Underline,anat                                       , txt ));
+CatReport_anat              =                               fullfile( pth, shiStrConcat( CatReport,Underline,anat                                    , pdf ));
+Resliced_c1anat             =                               fullfile( pth, shiStrConcat( Resliced,Underline,c1,anat                                  , nii ));
+Resliced_c2anat             =                               fullfile( pth, shiStrConcat( Resliced,Underline,c2,anat                                  , nii ));
+Resliced_c3anat             =                               fullfile( pth, shiStrConcat( Resliced,Underline,c3,anat                                  , nii ));
+TisDep_Resliced_c1anat      =                               fullfile( pth, shiStrConcat( TisDep,Underline,Resliced,Underline,c1,anat                 , nii ));
+TisLab_Resliced_c1anat      =                               fullfile( pth, shiStrConcat( TisLab,Underline,Resliced,Underline,c1,anat                 , nii ));
+ec1_TisDep_Resliced_c1anat  =                               fullfile( pth, shiStrConcat( ec1,Underline,TisDep,Underline,Resliced,Underline,c1,anat   , nii ));
+ec2_TisDep_Resliced_c1anat  =                               fullfile( pth, shiStrConcat( ec2,Underline,TisDep,Underline,Resliced,Underline,c1,anat   , nii ));
+ec3_TisDep_Resliced_c1anat  =                               fullfile( pth, shiStrConcat( ec3,Underline,TisDep,Underline,Resliced,Underline,c1,anat   , nii ));
+y_anat                      =                               fullfile( pth, shiStrConcat( y,Underline,anat                                            , nii ));
+iy_anat                     =                               fullfile( pth, shiStrConcat( iy,Underline,anat                                           , nii ));
+anat_seg8                   =                               fullfile( pth, shiStrConcat( anat,Underline,seg8                                         , mat ));
+BiasField_anat              =                               fullfile( pth, shiStrConcat( BiasField,Underline,anat                                    , nii ));
+uatlas                      =                               fullfile( pth, shiStrConcat( u,atlas                                                     , nii ));
+MaskDebone_rafunc1          =                               fullfile( pth, shiStrConcat( MaskDebone,Underline,r,a,func1                              , nii ));
+Resliced_brafunc1           =                               fullfile( pth, shiStrConcat( Resliced,Underline,b,r,a,func1                              , nii ));
+Mean_func1                  =                               fullfile( pth, shiStrConcat( Mean,Underline,func1                                        , nii ));
+Mean_afunc1                 =                               fullfile( pth, shiStrConcat( Mean,Underline,a,func1                                      , nii ));
+Mean_brafunc1               =                               fullfile( pth, shiStrConcat( Mean,Underline,b,r,a,func1                                  , nii ));
+Mean_kbrafunc1              =                               fullfile( pth, shiStrConcat( Mean,Underline,k,b,r,a,func1                                , nii ));
+Adj_v2dbrafunc1_uatlas      =                               fullfile( pth, shiStrConcat( Adj,Underline,v2,d,b,r,a,func1,Underline,u,atlas            , mat ));
+Adj_v2dkbrafunc1_uatlas     =                               fullfile( pth, shiStrConcat( Adj,Underline,v2,d,k,b,r,a,func1,Underline,u,atlas          , mat ));
+Adj_v2fdbrafunc1_uatlas     =                               fullfile( pth, shiStrConcat( Adj,Underline,v2,f,d,b,r,a,func1,Underline,u,atlas          , mat ));
+Adj_v2fdkbrafunc1_uatlas    =                               fullfile( pth, shiStrConcat( Adj,Underline,v2,f,d,k,b,r,a,func1,Underline,u,atlas        , mat ));
+Adj_v2fldbrafunc1_uatlas    =                               fullfile( pth, shiStrConcat( Adj,Underline,v2,f,l,d,b,r,a,func1,Underline,u,atlas        , mat ));
+Adj_v2fldkbrafunc1_uatlas   =                               fullfile( pth, shiStrConcat( Adj,Underline,v2,f,l,d,k,b,r,a,func1,Underline,u,atlas      , mat ));
+Adj_v2ldbrafunc1_uatlas     =                               fullfile( pth, shiStrConcat( Adj,Underline,v2,l,d,b,r,a,func1,Underline,u,atlas          , mat ));
+Adj_v2ldkbrafunc1_uatlas    =                               fullfile( pth, shiStrConcat( Adj,Underline,v2,l,d,k,b,r,a,func1,Underline,u,atlas        , mat ));
+Adj_v3dbrafunc1_uatlas      =                               fullfile( pth, shiStrConcat( Adj,Underline,v3,d,b,r,a,func1,Underline,u,atlas            , mat ));
+Adj_v3dkbrafunc1_uatlas     =                               fullfile( pth, shiStrConcat( Adj,Underline,v3,d,k,b,r,a,func1,Underline,u,atlas          , mat ));
+Adj_v3fdbrafunc1_uatlas     =                               fullfile( pth, shiStrConcat( Adj,Underline,v3,f,d,b,r,a,func1,Underline,u,atlas          , mat ));
+Adj_v3fdkbrafunc1_uatlas    =                               fullfile( pth, shiStrConcat( Adj,Underline,v3,f,d,k,b,r,a,func1,Underline,u,atlas        , mat ));
+Adj_v3fldbrafunc1_uatlas    =                               fullfile( pth, shiStrConcat( Adj,Underline,v3,f,l,d,b,r,a,func1,Underline,u,atlas        , mat ));
+Adj_v3fldkbrafunc1_uatlas   =                               fullfile( pth, shiStrConcat( Adj,Underline,v3,f,l,d,k,b,r,a,func1,Underline,u,atlas      , mat ));
+Adj_v3ldbrafunc1_uatlas     =                               fullfile( pth, shiStrConcat( Adj,Underline,v3,l,d,b,r,a,func1,Underline,u,atlas          , mat ));
+Adj_v3ldkbrafunc1_uatlas    =                               fullfile( pth, shiStrConcat( Adj,Underline,v3,l,d,k,b,r,a,func1,Underline,u,atlas        , mat ));
+Dvars_brafunc1              = shiIf( xDvars_do,             fullfile( pth, shiStrConcat( Dvars,Underline,b,r,a,func1                                 , txt )), {} );
+Dvars_v2dbrafunc1           =                               fullfile( pth, shiStrConcat( Dvars,Underline,v2,d,b,r,a,func1                            , txt ));
+Dvars_v2dkbrafunc1          =                               fullfile( pth, shiStrConcat( Dvars,Underline,v2,d,k,b,r,a,func1                          , txt ));
+Dvars_v2fdbrafunc1          =                               fullfile( pth, shiStrConcat( Dvars,Underline,v2,f,d,b,r,a,func1                          , txt ));
+Dvars_v2fdkbrafunc1         =                               fullfile( pth, shiStrConcat( Dvars,Underline,v2,f,d,k,b,r,a,func1                        , txt ));
+Dvars_v2fldbrafunc1         =                               fullfile( pth, shiStrConcat( Dvars,Underline,v2,f,l,d,b,r,a,func1                        , txt ));
+Dvars_v2fldkbrafunc1        =                               fullfile( pth, shiStrConcat( Dvars,Underline,v2,f,l,d,k,b,r,a,func1                      , txt ));
+Dvars_v2ldbrafunc1          =                               fullfile( pth, shiStrConcat( Dvars,Underline,v2,l,d,b,r,a,func1                          , txt ));
+Dvars_v2ldkbrafunc1         =                               fullfile( pth, shiStrConcat( Dvars,Underline,v2,l,d,k,b,r,a,func1                        , txt ));
+Dvars_v3dbrafunc1           =                               fullfile( pth, shiStrConcat( Dvars,Underline,v3,d,b,r,a,func1                            , txt ));
+Dvars_v3dkbrafunc1          =                               fullfile( pth, shiStrConcat( Dvars,Underline,v3,d,k,b,r,a,func1                          , txt ));
+Dvars_v3fdbrafunc1          =                               fullfile( pth, shiStrConcat( Dvars,Underline,v3,f,d,b,r,a,func1                          , txt ));
+Dvars_v3fdkbrafunc1         =                               fullfile( pth, shiStrConcat( Dvars,Underline,v3,f,d,k,b,r,a,func1                        , txt ));
+Dvars_v3fldbrafunc1         =                               fullfile( pth, shiStrConcat( Dvars,Underline,v3,f,l,d,b,r,a,func1                        , txt ));
+Dvars_v3fldkbrafunc1        =                               fullfile( pth, shiStrConcat( Dvars,Underline,v3,f,l,d,k,b,r,a,func1                      , txt ));
+Dvars_v3ldbrafunc1          =                               fullfile( pth, shiStrConcat( Dvars,Underline,v3,l,d,b,r,a,func1                          , txt ));
+Dvars_v3ldkbrafunc1         =                               fullfile( pth, shiStrConcat( Dvars,Underline,v3,l,d,k,b,r,a,func1                        , txt ));
+SpikeDvars_brafunc1         = shiIf( xDvars_do,             fullfile( pth, shiStrConcat( Spike,Dvars,Underline,b,r,a,func1                           , txt )), {} );
+SpikeDvars_v2dbrafunc1      =                               fullfile( pth, shiStrConcat( Spike,Dvars,Underline,v2,d,b,r,a,func1                      , txt ));
+SpikeDvars_v2dkbrafunc1     =                               fullfile( pth, shiStrConcat( Spike,Dvars,Underline,v2,d,k,b,r,a,func1                    , txt ));
+SpikeDvars_v2fdbrafunc1     =                               fullfile( pth, shiStrConcat( Spike,Dvars,Underline,v2,f,d,b,r,a,func1                    , txt ));
+SpikeDvars_v2fdkbrafunc1    =                               fullfile( pth, shiStrConcat( Spike,Dvars,Underline,v2,f,d,k,b,r,a,func1                  , txt ));
+SpikeDvars_v2fldbrafunc1    =                               fullfile( pth, shiStrConcat( Spike,Dvars,Underline,v2,f,l,d,b,r,a,func1                  , txt ));
+SpikeDvars_v2fldkbrafunc1   =                               fullfile( pth, shiStrConcat( Spike,Dvars,Underline,v2,f,l,d,k,b,r,a,func1                , txt ));
+SpikeDvars_v2ldbrafunc1     =                               fullfile( pth, shiStrConcat( Spike,Dvars,Underline,v2,l,d,b,r,a,func1                    , txt ));
+SpikeDvars_v2ldkbrafunc1    =                               fullfile( pth, shiStrConcat( Spike,Dvars,Underline,v2,l,d,k,b,r,a,func1                  , txt ));
+SpikeDvars_v3dbrafunc1      =                               fullfile( pth, shiStrConcat( Spike,Dvars,Underline,v3,d,b,r,a,func1                      , txt ));
+SpikeDvars_v3dkbrafunc1     =                               fullfile( pth, shiStrConcat( Spike,Dvars,Underline,v3,d,k,b,r,a,func1                    , txt ));
+SpikeDvars_v3fdbrafunc1     =                               fullfile( pth, shiStrConcat( Spike,Dvars,Underline,v3,f,d,b,r,a,func1                    , txt ));
+SpikeDvars_v3fdkbrafunc1    =                               fullfile( pth, shiStrConcat( Spike,Dvars,Underline,v3,f,d,k,b,r,a,func1                  , txt ));
+SpikeDvars_v3fldbrafunc1    =                               fullfile( pth, shiStrConcat( Spike,Dvars,Underline,v3,f,l,d,b,r,a,func1                  , txt ));
+SpikeDvars_v3fldkbrafunc1   =                               fullfile( pth, shiStrConcat( Spike,Dvars,Underline,v3,f,l,d,k,b,r,a,func1                , txt ));
+SpikeDvars_v3ldbrafunc1     =                               fullfile( pth, shiStrConcat( Spike,Dvars,Underline,v3,l,d,b,r,a,func1                    , txt ));
+SpikeDvars_v3ldkbrafunc1    =                               fullfile( pth, shiStrConcat( Spike,Dvars,Underline,v3,l,d,k,b,r,a,func1                  , txt ));
+Rp_func1                    =                               fullfile( pth, shiStrConcat( Rp,Underline,func1                                          , txt ));
+Rp_afunc1                   =                               fullfile( pth, shiStrConcat( Rp,Underline,a,func1                                        , txt ));
+AbsMot_Rp_func1             =                               fullfile( pth, shiStrConcat( AbsMot,Underline,Rp,Underline,func1                         , txt ));
+Fd_Rp_func1                 =                               fullfile( pth, shiStrConcat( Fd,Underline,Rp,Underline,func1                             , txt ));
+SpikeFd_Rp_func1            =                               fullfile( pth, shiStrConcat( Spike,Fd,Underline,Rp,Underline,func1                       , txt ));
+Mot24_Rp_func1              =                               fullfile( pth, shiStrConcat( Mot24,Underline,Rp,Underline,func1                          , txt ));
+fMot24_Rp_func1             =                               fullfile( pth, shiStrConcat( f,Mot24,Underline,Rp,Underline,func1                        , txt ));
+Nui2_dbrafunc1              =                               fullfile( pth, shiStrConcat( Nui2,Underline,d,b,r,a,func1                                , txt ));
+Nui2_dkbrafunc1             =                               fullfile( pth, shiStrConcat( Nui2,Underline,d,k,b,r,a,func1                              , txt ));
+Nui3_dbrafunc1              =                               fullfile( pth, shiStrConcat( Nui3,Underline,d,b,r,a,func1                                , txt ));
+Nui3_dkbrafunc1             =                               fullfile( pth, shiStrConcat( Nui3,Underline,d,k,b,r,a,func1                              , txt ));
+fNui2_dbrafunc1             =                               fullfile( pth, shiStrConcat( f,Nui2,Underline,d,b,r,a,func1                              , txt ));
+fNui2_dkbrafunc1            =                               fullfile( pth, shiStrConcat( f,Nui2,Underline,d,k,b,r,a,func1                            , txt ));
+fNui3_dbrafunc1             =                               fullfile( pth, shiStrConcat( f,Nui3,Underline,d,b,r,a,func1                              , txt ));
+fNui3_dkbrafunc1            =                               fullfile( pth, shiStrConcat( f,Nui3,Underline,d,k,b,r,a,func1                            , txt ));
+fCUSTOMCOV                  = shiIf( ~isempty(CustomCov),   fullfile( pth, shiStrConcat( f,CustomCov                                                 , txt )), {} );
+Censor_brafunc1             =                               fullfile( pth, shiStrConcat( Censor,Underline,b,r,a,func1                                , txt ));
+v2Spm_dbrafunc1             =                               fullfile( pth, shiStrConcat( v2,Spm,Underline,d,b,r,a,func1                              , mat ));
+v2Spm_dkbrafunc1            =                               fullfile( pth, shiStrConcat( v2,Spm,Underline,d,k,b,r,a,func1                            , mat ));
+v2Spm_fdbrafunc1            =                               fullfile( pth, shiStrConcat( v2,Spm,Underline,f,d,b,r,a,func1                            , mat ));
+v2Spm_fdkbrafunc1           =                               fullfile( pth, shiStrConcat( v2,Spm,Underline,f,d,k,b,r,a,func1                          , mat ));
+v2Spm_fldbrafunc1           =                               fullfile( pth, shiStrConcat( v2,Spm,Underline,f,l,d,b,r,a,func1                          , mat ));
+v2Spm_fldkbrafunc1          =                               fullfile( pth, shiStrConcat( v2,Spm,Underline,f,l,d,k,b,r,a,func1                        , mat ));
+v2Spm_ldbrafunc1            =                               fullfile( pth, shiStrConcat( v2,Spm,Underline,l,d,b,r,a,func1                            , mat ));
+v2Spm_ldkbrafunc1           =                               fullfile( pth, shiStrConcat( v2,Spm,Underline,l,d,k,b,r,a,func1                          , mat ));
+v3Spm_dbrafunc1             =                               fullfile( pth, shiStrConcat( v3,Spm,Underline,d,b,r,a,func1                              , mat ));
+v3Spm_dkbrafunc1            =                               fullfile( pth, shiStrConcat( v3,Spm,Underline,d,k,b,r,a,func1                            , mat ));
+v3Spm_fdbrafunc1            =                               fullfile( pth, shiStrConcat( v3,Spm,Underline,f,d,b,r,a,func1                            , mat ));
+v3Spm_fdkbrafunc1           =                               fullfile( pth, shiStrConcat( v3,Spm,Underline,f,d,k,b,r,a,func1                          , mat ));
+v3Spm_fldbrafunc1           =                               fullfile( pth, shiStrConcat( v3,Spm,Underline,f,l,d,b,r,a,func1                          , mat ));
+v3Spm_fldkbrafunc1          =                               fullfile( pth, shiStrConcat( v3,Spm,Underline,f,l,d,k,b,r,a,func1                        , mat ));
+v3Spm_ldbrafunc1            =                               fullfile( pth, shiStrConcat( v3,Spm,Underline,l,d,b,r,a,func1                            , mat ));
+v3Spm_ldkbrafunc1           =                               fullfile( pth, shiStrConcat( v3,Spm,Underline,l,d,k,b,r,a,func1                          , mat ));
+rfunc                       =                               fullfile( pth, shiStrConcat( r,func                                                      , nii ));
+afunc                       =                               fullfile( pth, shiStrConcat( a,func                                                      , nii ));
+rafunc                      =                               fullfile( pth, shiStrConcat( r,a,func                                                    , nii ));
+brafunc                     =                               fullfile( pth, shiStrConcat( b,r,a,func                                                  , nii ));
+kbrafunc                    =                               fullfile( pth, shiStrConcat( k,b,r,a,func                                                , nii ));
+dbrafunc                    =                               fullfile( pth, shiStrConcat( d,b,r,a,func                                                , nii ));
+dkbrafunc                   =                               fullfile( pth, shiStrConcat( d,k,b,r,a,func                                              , nii ));
+ldbrafunc                   =                               fullfile( pth, shiStrConcat( l,d,b,r,a,func                                              , nii ));
+ldkbrafunc                  =                               fullfile( pth, shiStrConcat( l,d,k,b,r,a,func                                            , nii ));
+fdbrafunc                   =                               fullfile( pth, shiStrConcat( f,d,b,r,a,func                                              , nii ));
+fdkbrafunc                  =                               fullfile( pth, shiStrConcat( f,d,k,b,r,a,func                                            , nii ));
+fldbrafunc                  =                               fullfile( pth, shiStrConcat( f,l,d,b,r,a,func                                            , nii ));
+fldkbrafunc                 =                               fullfile( pth, shiStrConcat( f,l,d,k,b,r,a,func                                          , nii ));
+v2dbrafunc                  =                               fullfile( pth, shiStrConcat( v2,d,b,r,a,func                                             , nii ));
+v2dkbrafunc                 =                               fullfile( pth, shiStrConcat( v2,d,k,b,r,a,func                                           , nii ));
+v2fdbrafunc                 =                               fullfile( pth, shiStrConcat( v2,f,d,b,r,a,func                                           , nii ));
+v2fdkbrafunc                =                               fullfile( pth, shiStrConcat( v2,f,d,k,b,r,a,func                                         , nii ));
+v2fldbrafunc                =                               fullfile( pth, shiStrConcat( v2,f,l,d,b,r,a,func                                         , nii ));
+v2fldkbrafunc               =                               fullfile( pth, shiStrConcat( v2,f,l,d,k,b,r,a,func                                       , nii ));
+v2ldbrafunc                 =                               fullfile( pth, shiStrConcat( v2,l,d,b,r,a,func                                           , nii ));
+v2ldkbrafunc                =                               fullfile( pth, shiStrConcat( v2,l,d,k,b,r,a,func                                         , nii ));
+v3dbrafunc                  =                               fullfile( pth, shiStrConcat( v3,d,b,r,a,func                                             , nii ));
+v3dkbrafunc                 =                               fullfile( pth, shiStrConcat( v3,d,k,b,r,a,func                                           , nii ));
+v3fdbrafunc                 =                               fullfile( pth, shiStrConcat( v3,f,d,b,r,a,func                                           , nii ));
+v3fdkbrafunc                =                               fullfile( pth, shiStrConcat( v3,f,d,k,b,r,a,func                                         , nii ));
+v3fldbrafunc                =                               fullfile( pth, shiStrConcat( v3,f,l,d,b,r,a,func                                         , nii ));
+v3fldkbrafunc               =                               fullfile( pth, shiStrConcat( v3,f,l,d,k,b,r,a,func                                       , nii ));
+v3ldbrafunc                 =                               fullfile( pth, shiStrConcat( v3,l,d,b,r,a,func                                           , nii ));
+v3ldkbrafunc                =                               fullfile( pth, shiStrConcat( v3,l,d,k,b,r,a,func                                         , nii ));
+s4v2dbrafunc                =                               fullfile( pth, shiStrConcat( s4,v2,d,b,r,a,func                                          , nii ));
+s4v2dkbrafunc               =                               fullfile( pth, shiStrConcat( s4,v2,d,k,b,r,a,func                                        , nii ));
+s4v2fdbrafunc               =                               fullfile( pth, shiStrConcat( s4,v2,f,d,b,r,a,func                                        , nii ));
+s4v2fdkbrafunc              =                               fullfile( pth, shiStrConcat( s4,v2,f,d,k,b,r,a,func                                      , nii ));
+s4v2fldbrafunc              =                               fullfile( pth, shiStrConcat( s4,v2,f,l,d,b,r,a,func                                      , nii ));
+s4v2fldkbrafunc             =                               fullfile( pth, shiStrConcat( s4,v2,f,l,d,k,b,r,a,func                                    , nii ));
+s4v2ldbrafunc               =                               fullfile( pth, shiStrConcat( s4,v2,l,d,b,r,a,func                                        , nii ));
+s4v2ldkbrafunc              =                               fullfile( pth, shiStrConcat( s4,v2,l,d,k,b,r,a,func                                      , nii ));
+s4v3dbrafunc                =                               fullfile( pth, shiStrConcat( s4,v3,d,b,r,a,func                                          , nii ));
+s4v3dkbrafunc               =                               fullfile( pth, shiStrConcat( s4,v3,d,k,b,r,a,func                                        , nii ));
+s4v3fdbrafunc               =                               fullfile( pth, shiStrConcat( s4,v3,f,d,b,r,a,func                                        , nii ));
+s4v3fdkbrafunc              =                               fullfile( pth, shiStrConcat( s4,v3,f,d,k,b,r,a,func                                      , nii ));
+s4v3fldbrafunc              =                               fullfile( pth, shiStrConcat( s4,v3,f,l,d,b,r,a,func                                      , nii ));
+s4v3fldkbrafunc             =                               fullfile( pth, shiStrConcat( s4,v3,f,l,d,k,b,r,a,func                                    , nii ));
+s4v3ldbrafunc               =                               fullfile( pth, shiStrConcat( s4,v3,l,d,b,r,a,func                                        , nii ));
+s4v3ldkbrafunc              =                               fullfile( pth, shiStrConcat( s4,v3,l,d,k,b,r,a,func                                      , nii ));
+s8v2dbrafunc                =                               fullfile( pth, shiStrConcat( s8,v2,d,b,r,a,func                                          , nii ));
+s8v2dkbrafunc               =                               fullfile( pth, shiStrConcat( s8,v2,d,k,b,r,a,func                                        , nii ));
+s8v2fdbrafunc               =                               fullfile( pth, shiStrConcat( s8,v2,f,d,b,r,a,func                                        , nii ));
+s8v2fdkbrafunc              =                               fullfile( pth, shiStrConcat( s8,v2,f,d,k,b,r,a,func                                      , nii ));
+s8v2fldbrafunc              =                               fullfile( pth, shiStrConcat( s8,v2,f,l,d,b,r,a,func                                      , nii ));
+s8v2fldkbrafunc             =                               fullfile( pth, shiStrConcat( s8,v2,f,l,d,k,b,r,a,func                                    , nii ));
+s8v2ldbrafunc               =                               fullfile( pth, shiStrConcat( s8,v2,l,d,b,r,a,func                                        , nii ));
+s8v2ldkbrafunc              =                               fullfile( pth, shiStrConcat( s8,v2,l,d,k,b,r,a,func                                      , nii ));
+s8v3dbrafunc                =                               fullfile( pth, shiStrConcat( s8,v3,d,b,r,a,func                                          , nii ));
+s8v3dkbrafunc               =                               fullfile( pth, shiStrConcat( s8,v3,d,k,b,r,a,func                                        , nii ));
+s8v3fdbrafunc               =                               fullfile( pth, shiStrConcat( s8,v3,f,d,b,r,a,func                                        , nii ));
+s8v3fdkbrafunc              =                               fullfile( pth, shiStrConcat( s8,v3,f,d,k,b,r,a,func                                      , nii ));
+s8v3fldbrafunc              =                               fullfile( pth, shiStrConcat( s8,v3,f,l,d,b,r,a,func                                      , nii ));
+s8v3fldkbrafunc             =                               fullfile( pth, shiStrConcat( s8,v3,f,l,d,k,b,r,a,func                                    , nii ));
+s8v3ldbrafunc               =                               fullfile( pth, shiStrConcat( s8,v3,l,d,b,r,a,func                                        , nii ));
+s8v3ldkbrafunc              =                               fullfile( pth, shiStrConcat( s8,v3,l,d,k,b,r,a,func                                      , nii ));
+ws4v2dbrafunc               =                               fullfile( pth, shiStrConcat( w,s4,v2,d,b,r,a,func                                        , nii ));
+ws4v2dkbrafunc              =                               fullfile( pth, shiStrConcat( w,s4,v2,d,k,b,r,a,func                                      , nii ));
+ws4v2fdbrafunc              =                               fullfile( pth, shiStrConcat( w,s4,v2,f,d,b,r,a,func                                      , nii ));
+ws4v2fdkbrafunc             =                               fullfile( pth, shiStrConcat( w,s4,v2,f,d,k,b,r,a,func                                    , nii ));
+ws4v2fldbrafunc             =                               fullfile( pth, shiStrConcat( w,s4,v2,f,l,d,b,r,a,func                                    , nii ));
+ws4v2fldkbrafunc            =                               fullfile( pth, shiStrConcat( w,s4,v2,f,l,d,k,b,r,a,func                                  , nii ));
+ws4v2ldbrafunc              =                               fullfile( pth, shiStrConcat( w,s4,v2,l,d,b,r,a,func                                      , nii ));
+ws4v2ldkbrafunc             =                               fullfile( pth, shiStrConcat( w,s4,v2,l,d,k,b,r,a,func                                    , nii ));
+ws4v3dbrafunc               =                               fullfile( pth, shiStrConcat( w,s4,v3,d,b,r,a,func                                        , nii ));
+ws4v3dkbrafunc              =                               fullfile( pth, shiStrConcat( w,s4,v3,d,k,b,r,a,func                                      , nii ));
+ws4v3fdbrafunc              =                               fullfile( pth, shiStrConcat( w,s4,v3,f,d,b,r,a,func                                      , nii ));
+ws4v3fdkbrafunc             =                               fullfile( pth, shiStrConcat( w,s4,v3,f,d,k,b,r,a,func                                    , nii ));
+ws4v3fldbrafunc             =                               fullfile( pth, shiStrConcat( w,s4,v3,f,l,d,b,r,a,func                                    , nii ));
+ws4v3fldkbrafunc            =                               fullfile( pth, shiStrConcat( w,s4,v3,f,l,d,k,b,r,a,func                                  , nii ));
+ws4v3ldbrafunc              =                               fullfile( pth, shiStrConcat( w,s4,v3,l,d,b,r,a,func                                      , nii ));
+ws4v3ldkbrafunc             =                               fullfile( pth, shiStrConcat( w,s4,v3,l,d,k,b,r,a,func                                    , nii ));
+ws8v2dbrafunc               =                               fullfile( pth, shiStrConcat( w,s8,v2,d,b,r,a,func                                        , nii ));
+ws8v2dkbrafunc              =                               fullfile( pth, shiStrConcat( w,s8,v2,d,k,b,r,a,func                                      , nii ));
+ws8v2fdbrafunc              =                               fullfile( pth, shiStrConcat( w,s8,v2,f,d,b,r,a,func                                      , nii ));
+ws8v2fdkbrafunc             =                               fullfile( pth, shiStrConcat( w,s8,v2,f,d,k,b,r,a,func                                    , nii ));
+ws8v2fldbrafunc             =                               fullfile( pth, shiStrConcat( w,s8,v2,f,l,d,b,r,a,func                                    , nii ));
+ws8v2fldkbrafunc            =                               fullfile( pth, shiStrConcat( w,s8,v2,f,l,d,k,b,r,a,func                                  , nii ));
+ws8v2ldbrafunc              =                               fullfile( pth, shiStrConcat( w,s8,v2,l,d,b,r,a,func                                      , nii ));
+ws8v2ldkbrafunc             =                               fullfile( pth, shiStrConcat( w,s8,v2,l,d,k,b,r,a,func                                    , nii ));
+ws8v3dbrafunc               =                               fullfile( pth, shiStrConcat( w,s8,v3,d,b,r,a,func                                        , nii ));
+ws8v3dkbrafunc              =                               fullfile( pth, shiStrConcat( w,s8,v3,d,k,b,r,a,func                                      , nii ));
+ws8v3fdbrafunc              =                               fullfile( pth, shiStrConcat( w,s8,v3,f,d,b,r,a,func                                      , nii ));
+ws8v3fdkbrafunc             =                               fullfile( pth, shiStrConcat( w,s8,v3,f,d,k,b,r,a,func                                    , nii ));
+ws8v3fldbrafunc             =                               fullfile( pth, shiStrConcat( w,s8,v3,f,l,d,b,r,a,func                                    , nii ));
+ws8v3fldkbrafunc            =                               fullfile( pth, shiStrConcat( w,s8,v3,f,l,d,k,b,r,a,func                                  , nii ));
+ws8v3ldbrafunc              =                               fullfile( pth, shiStrConcat( w,s8,v3,l,d,b,r,a,func                                      , nii ));
+ws8v3ldkbrafunc             =                               fullfile( pth, shiStrConcat( w,s8,v3,l,d,k,b,r,a,func                                    , nii ));
+wv2dbrafunc                 =                               fullfile( pth, shiStrConcat( w,v2,d,b,r,a,func                                           , nii ));
+wv2dkbrafunc                =                               fullfile( pth, shiStrConcat( w,v2,d,k,b,r,a,func                                         , nii ));
+wv2fdbrafunc                =                               fullfile( pth, shiStrConcat( w,v2,f,d,b,r,a,func                                         , nii ));
+wv2fdkbrafunc               =                               fullfile( pth, shiStrConcat( w,v2,f,d,k,b,r,a,func                                       , nii ));
+wv2fldbrafunc               =                               fullfile( pth, shiStrConcat( w,v2,f,l,d,b,r,a,func                                       , nii ));
+wv2fldkbrafunc              =                               fullfile( pth, shiStrConcat( w,v2,f,l,d,k,b,r,a,func                                     , nii ));
+wv2ldbrafunc                =                               fullfile( pth, shiStrConcat( w,v2,l,d,b,r,a,func                                         , nii ));
+wv2ldkbrafunc               =                               fullfile( pth, shiStrConcat( w,v2,l,d,k,b,r,a,func                                       , nii ));
+wv3dbrafunc                 =                               fullfile( pth, shiStrConcat( w,v3,d,b,r,a,func                                           , nii ));
+wv3dkbrafunc                =                               fullfile( pth, shiStrConcat( w,v3,d,k,b,r,a,func                                         , nii ));
+wv3fdbrafunc                =                               fullfile( pth, shiStrConcat( w,v3,f,d,b,r,a,func                                         , nii ));
+wv3fdkbrafunc               =                               fullfile( pth, shiStrConcat( w,v3,f,d,k,b,r,a,func                                       , nii ));
+wv3fldbrafunc               =                               fullfile( pth, shiStrConcat( w,v3,f,l,d,b,r,a,func                                       , nii ));
+wv3fldkbrafunc              =                               fullfile( pth, shiStrConcat( w,v3,f,l,d,k,b,r,a,func                                     , nii ));
+wv3ldbrafunc                =                               fullfile( pth, shiStrConcat( w,v3,l,d,b,r,a,func                                         , nii ));
+wv3ldkbrafunc               =                               fullfile( pth, shiStrConcat( w,v3,l,d,k,b,r,a,func                                       , nii ));
+PreprocSumm_v2fldkbrafunc1  =                               fullfile( pth, shiStrConcat( PreprocSumm,Underline,v2,f,l,d,k,b,r,a,func1                , mat ));
+PreprocSumm_v2fldbrafunc1   =                               fullfile( pth, shiStrConcat( PreprocSumm,Underline,v2,f,l,d,b,r,a,func1                  , mat ));
+PreprocSumm_v2fdkbrafunc1   =                               fullfile( pth, shiStrConcat( PreprocSumm,Underline,v2,f,d,k,b,r,a,func1                  , mat ));
+PreprocSumm_v2fdbrafunc1    =                               fullfile( pth, shiStrConcat( PreprocSumm,Underline,v2,f,d,b,r,a,func1                    , mat ));
+PreprocSumm_v2ldkbrafunc1   =                               fullfile( pth, shiStrConcat( PreprocSumm,Underline,v2,l,d,k,b,r,a,func1                  , mat ));
+PreprocSumm_v2ldbrafunc1    =                               fullfile( pth, shiStrConcat( PreprocSumm,Underline,v2,l,d,b,r,a,func1                    , mat ));
+PreprocSumm_v2dkbrafunc1    =                               fullfile( pth, shiStrConcat( PreprocSumm,Underline,v2,d,k,b,r,a,func1                    , mat ));
+PreprocSumm_v2dbrafunc1     =                               fullfile( pth, shiStrConcat( PreprocSumm,Underline,v2,d,b,r,a,func1                      , mat ));
+PreprocSumm_v3fldkbrafunc1  =                               fullfile( pth, shiStrConcat( PreprocSumm,Underline,v3,f,l,d,k,b,r,a,func1                , mat ));
+PreprocSumm_v3fldbrafunc1   =                               fullfile( pth, shiStrConcat( PreprocSumm,Underline,v3,f,l,d,b,r,a,func1                  , mat ));
+PreprocSumm_v3fdkbrafunc1   =                               fullfile( pth, shiStrConcat( PreprocSumm,Underline,v3,f,d,k,b,r,a,func1                  , mat ));
+PreprocSumm_v3fdbrafunc1    =                               fullfile( pth, shiStrConcat( PreprocSumm,Underline,v3,f,d,b,r,a,func1                    , mat ));
+PreprocSumm_v3ldkbrafunc1   =                               fullfile( pth, shiStrConcat( PreprocSumm,Underline,v3,l,d,k,b,r,a,func1                  , mat ));
+PreprocSumm_v3ldbrafunc1    =                               fullfile( pth, shiStrConcat( PreprocSumm,Underline,v3,l,d,b,r,a,func1                    , mat ));
+PreprocSumm_v3dkbrafunc1    =                               fullfile( pth, shiStrConcat( PreprocSumm,Underline,v3,d,k,b,r,a,func1                    , mat ));
+PreprocSumm_v3dbrafunc1     =                               fullfile( pth, shiStrConcat( PreprocSumm,Underline,v3,d,b,r,a,func1                      , mat ));
 
 
 %% ========================================================================
@@ -563,10 +586,10 @@ xxi = xxi+1;   STEP{xxi,1} = @() shiSpmPreprocSliceTime( FUNC, xTr, xSlice_Ta, x
 xxi = xxi+1;   STEP{xxi,1} = @() shiSpmPreprocRealign( afunc, r, 'overwrite' );   OUT{xxi,1} = { rafunc; Mean_afunc1; };
 
 % [E] * 5           coregistration segmentation     % [E] * 5           % [E] * 5           % [E] * 5           % [E] * 5           % [E] * 5           % [E] * 5           % [E] * 5           % [E] * 5           % [E] * 5           % [E] * 5           % [E] * 5           % [E] * 5           % [E] * 5           
-xxi = xxi+1;   STEP{xxi,1} = @() shiSpmPreprocSegment( shiSpmPreprocCoregister( ANAT, Mean_afunc1, [], false, [], 'overwrite' ), true, 'overwrite' );   OUT{xxi,1} = { y_anat; iy_anat; c1anat; c2anat; c3anat; manat; };
+xxi = xxi+1;   STEP{xxi,1} = @() xxStepFunc_Segment( xSegment_Method, shiSpmPreprocCoregister( ANAT, Mean_afunc1, [], false, [], 'overwrite' ) );   OUT{xxi,1} = { y_anat; iy_anat; c0anat; c1anat; c2anat; c3anat; };
 
 % [G] * 6           deboning                        % [G] * 6           % [G] * 6           % [G] * 6           % [G] * 6           % [G] * 6           % [G] * 6           % [G] * 6           % [G] * 6           % [G] * 6           % [G] * 6           % [G] * 6           % [G] * 6           % [G] * 6           
-xxi = xxi+1;   STEP{xxi,1} = @() shiSpmPreprocSkullStrip( rafunc, c1anat, c2anat, c3anat, xDebone_Expr, true, b, 'overwrite' );   OUT{xxi,1} = { brafunc; MaskDebone_rafunc1; };
+xxi = xxi+1;   STEP{xxi,1} = @() xxStepFunc_Debone( xDebone_Method, {c0anat; c1anat; c2anat; c3anat;}, xDebone_Expr, rafunc, b );   OUT{xxi,1} = { brafunc; MaskDebone_rafunc1; };
 
 % [U] * 7           reslicing tissue maps           % [U] * 7           % [U] * 7           % [U] * 7           % [U] * 7           % [U] * 7           % [U] * 7           % [U] * 7           % [U] * 7           % [U] * 7           % [U] * 7           % [U] * 7           % [U] * 7           % [U] * 7           
 xxi = xxi+1;   STEP{xxi,1} = @() shiSpmReslice( [brafunc(1), c1anat, c2anat, c3anat], [], [] );   OUT{xxi,1} = { Resliced_c1anat; Resliced_c2anat; Resliced_c3anat; };
@@ -715,7 +738,7 @@ xxi = xxi+1;   STEP{xxi,1} = @() shiSpmPreprocNormalise(    v3ldkbrafunc, y_anat
 xxi = xxi+1;   STEP{xxi,1} = @() shiSpmPreprocNormalise(     v3ldbrafunc, y_anat, xNormalize_VoxelSize, [], [], w, 'overwrite' );   OUT{xxi,1} = {     wv3ldbrafunc };
 xxi = xxi+1;   STEP{xxi,1} = @() shiSpmPreprocNormalise(     v3dkbrafunc, y_anat, xNormalize_VoxelSize, [], [], w, 'overwrite' );   OUT{xxi,1} = {     wv3dkbrafunc };
 xxi = xxi+1;   STEP{xxi,1} = @() shiSpmPreprocNormalise(      v3dbrafunc, y_anat, xNormalize_VoxelSize, [], [], w, 'overwrite' );   OUT{xxi,1} = {      wv3dbrafunc };
-xxi = xxi+1;   STEP{xxi,1} = @() shiSpmPreprocNormalise(    [ANAT;manat], y_anat, [1 1 1], [], [], w, 'overwrite' );   OUT{xxi,1} = { wanat; wmanat; };
+xxi = xxi+1;   STEP{xxi,1} = @() shiSpmPreprocNormalise(    ANAT, y_anat, [1 1 1], [], [], w, 'overwrite' );   OUT{xxi,1} = { wanat; };
 
 % [S] * 128         unwarping atlas                 % [S] * 128         % [S] * 128         % [S] * 128         % [S] * 128         % [S] * 128         % [S] * 128         % [S] * 128         % [S] * 128         % [S] * 128         % [S] * 128         % [S] * 128         % [S] * 128         % [S] * 128         
 xxi = xxi+1;   STEP{xxi,1} = @() xxStepFunc_AtlasUnwarp( ATLAS, iy_anat, u );   OUT{xxi,1} = { uatlas; };
@@ -777,102 +800,133 @@ xxi = xxi+1;   STEP{xxi,1} = @() xxStepFunc_PreprocSumm( TisDep_Resliced_c1anat,
 % [Y] * 169:171     tar                             % [Y] * 169:171     % [Y] * 169:171     % [Y] * 169:171     % [Y] * 169:171     % [Y] * 169:171     % [Y] * 169:171     % [Y] * 169:171     % [Y] * 169:171     % [Y] * 169:171     % [Y] * 169:171     % [Y] * 169:171     % [Y] * 169:171     % [Y] * 169:171     
 xxi = xxi+1;   STEP{xxi,1} = @() xxStepFun_Compress({
     [
-    ATLAS; uatlas; ATLAS_LABEL;
+        ATLAS; uatlas; ATLAS_LABEL;
     ];
-    [
-    ANAT; manat; wanat; wmanat;
-    c1anat; c2anat; c3anat; rc1anat; rc2anat; rc3anat; Resliced_c1anat; Resliced_c2anat; Resliced_c3anat;
-    wc1anat; wc2anat; wc3anat; mwc1anat; mwc2anat; mwc3anat;
-    TisLab_Resliced_c1anat; TisDep_Resliced_c1anat;
-    ec1_TisDep_Resliced_c1anat; ec2_TisDep_Resliced_c1anat; ec3_TisDep_Resliced_c1anat;
-    y_anat; iy_anat; BiasField_anat; anat_seg8;
-    ];
-    [
-    Mean_func1; Mean_afunc1; Mean_brafunc1; Mean_kbrafunc1; Resliced_brafunc1;
-    ];
+    xxexistfilter([
+        anat                      ;
+        manat                     ;
+        wanat                     ;
+        wmanat                    ;
+        c0anat                    ;
+        c1anat                    ;
+        c2anat                    ;
+        c3anat                    ;
+        wc0anat                   ;
+        wc1anat                   ;
+        wc2anat                   ;
+        wc3anat                   ;
+        mwc1anat                  ;
+        mwc2anat                  ;
+        mwc3anat                  ;
+        rc1anat                   ;
+        rc2anat                   ;
+        rc3anat                   ;
+        wjanat                    ;
+        CatMat_anat               ;
+        CatXml_anat               ;
+        CatIqr_anat               ;
+        CatTiv_anat               ;
+        CatReport_anat            ;
+        Resliced_c1anat           ;
+        Resliced_c2anat           ;
+        Resliced_c3anat           ;
+        TisDep_Resliced_c1anat    ;
+        TisLab_Resliced_c1anat    ;
+        ec1_TisDep_Resliced_c1anat;
+        ec2_TisDep_Resliced_c1anat;
+        ec3_TisDep_Resliced_c1anat;
+        y_anat                    ;
+        iy_anat                   ;
+        anat_seg8                 ;
+        BiasField_anat            ;
+        MaskDebone_rafunc1        ;
+    ]);
+    xxexistfilter([
+        Mean_func1; Mean_afunc1; Mean_brafunc1; Mean_kbrafunc1; Resliced_brafunc1;
+    ]);
     },{
     fullfile(pth,'atlas_etc.gz');
     fullfile(pth,'anat_etc.gz');
-    fullfile(pth,'other_images.gz');
+    fullfile(pth,'Mean_etc.gz');
     });   OUT{xxi,1} = {  };
 xxi = xxi+1;   STEP{xxi,1} = @() xxStepFun_Compress({
-    [
-    Dvars_brafunc1      ;
-    Dvars_v2dbrafunc1   ;
-    Dvars_v2dkbrafunc1  ;
-    Dvars_v2fdbrafunc1  ;
-    Dvars_v2fdkbrafunc1 ;
-    Dvars_v2fldbrafunc1 ;
-    Dvars_v2fldkbrafunc1;
-    Dvars_v2ldbrafunc1  ;
-    Dvars_v2ldkbrafunc1 ;
-    Dvars_v3dbrafunc1   ;
-    Dvars_v3dkbrafunc1  ;
-    Dvars_v3fdbrafunc1  ;
-    Dvars_v3fdkbrafunc1 ;
-    Dvars_v3fldbrafunc1 ;
-    Dvars_v3fldkbrafunc1;
-    Dvars_v3ldbrafunc1  ;
-    Dvars_v3ldkbrafunc1 ;
-    Rp_func1            ;
-    Rp_afunc1           ;
-    Fd_Rp_func1         ;
-    Mot24_Rp_func1      ;
-    fMot24_Rp_func1     ;
-    Nui2_dbrafunc1      ;
-    Nui2_dkbrafunc1     ;
-    Nui3_dbrafunc1      ;
-    Nui3_dkbrafunc1     ;
-    fNui2_dbrafunc1     ;
-    fNui2_dkbrafunc1    ;
-    fNui3_dbrafunc1     ;
-    fNui3_dkbrafunc1    ;
-    CUSTOMCOV           ;
-    fCUSTOMCOV          ;
-    v2Spm_dbrafunc1     ;
-    v2Spm_dkbrafunc1    ;
-    v2Spm_fdbrafunc1    ;
-    v2Spm_fdkbrafunc1   ;
-    v2Spm_fldbrafunc1   ;
-    v2Spm_fldkbrafunc1  ;
-    v2Spm_ldbrafunc1    ;
-    v2Spm_ldkbrafunc1   ;
-    v3Spm_dbrafunc1     ;
-    v3Spm_dkbrafunc1    ;
-    v3Spm_fdbrafunc1    ;
-    v3Spm_fdkbrafunc1   ;
-    v3Spm_fldbrafunc1   ;
-    v3Spm_fldkbrafunc1  ;
-    v3Spm_ldbrafunc1    ;
-    v3Spm_ldkbrafunc1   ;
-    ];
-    [
-    SpikeDvars_brafunc1      ;
-    SpikeDvars_v2dbrafunc1   ;
-    SpikeDvars_v2dkbrafunc1  ;
-    SpikeDvars_v2fdbrafunc1  ;
-    SpikeDvars_v2fdkbrafunc1 ;
-    SpikeDvars_v2fldbrafunc1 ;
-    SpikeDvars_v2fldkbrafunc1;
-    SpikeDvars_v2ldbrafunc1  ;
-    SpikeDvars_v2ldkbrafunc1 ;
-    SpikeDvars_v3dbrafunc1   ;
-    SpikeDvars_v3dkbrafunc1  ;
-    SpikeDvars_v3fdbrafunc1  ;
-    SpikeDvars_v3fdkbrafunc1 ;
-    SpikeDvars_v3fldbrafunc1 ;
-    SpikeDvars_v3fldkbrafunc1;
-    SpikeDvars_v3ldbrafunc1  ;
-    SpikeDvars_v3ldkbrafunc1 ;
-    SpikeFd_Rp_func1         ;
-    Censor_brafunc1          ;
-    ];
+    xxexistfilter([
+        Dvars_brafunc1      ;
+        Dvars_v2dbrafunc1   ;
+        Dvars_v2dkbrafunc1  ;
+        Dvars_v2fdbrafunc1  ;
+        Dvars_v2fdkbrafunc1 ;
+        Dvars_v2fldbrafunc1 ;
+        Dvars_v2fldkbrafunc1;
+        Dvars_v2ldbrafunc1  ;
+        Dvars_v2ldkbrafunc1 ;
+        Dvars_v3dbrafunc1   ;
+        Dvars_v3dkbrafunc1  ;
+        Dvars_v3fdbrafunc1  ;
+        Dvars_v3fdkbrafunc1 ;
+        Dvars_v3fldbrafunc1 ;
+        Dvars_v3fldkbrafunc1;
+        Dvars_v3ldbrafunc1  ;
+        Dvars_v3ldkbrafunc1 ;
+        Rp_func1            ;
+        Rp_afunc1           ;
+        Fd_Rp_func1         ;
+        AbsMot_Rp_func1     ;
+        Mot24_Rp_func1      ;
+        fMot24_Rp_func1     ;
+        Nui2_dbrafunc1      ;
+        Nui2_dkbrafunc1     ;
+        Nui3_dbrafunc1      ;
+        Nui3_dkbrafunc1     ;
+        fNui2_dbrafunc1     ;
+        fNui2_dkbrafunc1    ;
+        fNui3_dbrafunc1     ;
+        fNui3_dkbrafunc1    ;
+        CUSTOMCOV           ;
+        fCUSTOMCOV          ;
+        v2Spm_dbrafunc1     ;
+        v2Spm_dkbrafunc1    ;
+        v2Spm_fdbrafunc1    ;
+        v2Spm_fdkbrafunc1   ;
+        v2Spm_fldbrafunc1   ;
+        v2Spm_fldkbrafunc1  ;
+        v2Spm_ldbrafunc1    ;
+        v2Spm_ldkbrafunc1   ;
+        v3Spm_dbrafunc1     ;
+        v3Spm_dkbrafunc1    ;
+        v3Spm_fdbrafunc1    ;
+        v3Spm_fdkbrafunc1   ;
+        v3Spm_fldbrafunc1   ;
+        v3Spm_fldkbrafunc1  ;
+        v3Spm_ldbrafunc1    ;
+        v3Spm_ldkbrafunc1   ;
+        ]);
+    xxexistfilter([
+        SpikeDvars_brafunc1      ;
+        SpikeDvars_v2dbrafunc1   ;
+        SpikeDvars_v2dkbrafunc1  ;
+        SpikeDvars_v2fdbrafunc1  ;
+        SpikeDvars_v2fdkbrafunc1 ;
+        SpikeDvars_v2fldbrafunc1 ;
+        SpikeDvars_v2fldkbrafunc1;
+        SpikeDvars_v2ldbrafunc1  ;
+        SpikeDvars_v2ldkbrafunc1 ;
+        SpikeDvars_v3dbrafunc1   ;
+        SpikeDvars_v3dkbrafunc1  ;
+        SpikeDvars_v3fdbrafunc1  ;
+        SpikeDvars_v3fdkbrafunc1 ;
+        SpikeDvars_v3fldbrafunc1 ;
+        SpikeDvars_v3fldkbrafunc1;
+        SpikeDvars_v3ldbrafunc1  ;
+        SpikeDvars_v3ldkbrafunc1 ;
+        SpikeFd_Rp_func1         ;
+        Censor_brafunc1          ;
+    ]);
     },{
     fullfile(pth,'Covariates.gz');
     fullfile(pth,'Spikes.gz');
     });   OUT{xxi,1} = {  };
 xxi = xxi+1;   STEP{xxi,1} = @() xxStepFun_Compress({
-    FUNC               ;
     afunc              ;
     brafunc            ;
     dbrafunc           ;
@@ -982,20 +1036,21 @@ xxi = xxi+1;   STEP{xxi,1} = @() xxStepFun_Compress({
     wv3fldkbrafunc     ;
     wv3ldbrafunc       ;
     wv3ldkbrafunc      ;
+    FUNC               ;
     },[]); OUT{xxi,1} = {  }; %#ok<*NASGU> 
 
 %% ========================================================================
 %% ========================================================================
 %% ========================================================================
 %%
-for i = xStepInd
+for i = xStepInd(:)'
     shiDisp({ ...
         shiTime(0), ...
         '', ...
         'Path:', ...
         ['    ',pth], ...
         '', ...
-        sprintf('Step %d (of %d):',i,xxi), ...
+        sprintf('Step %d:',i), ...
         ['    ',char(STEP{i})] ...
         });
     STEP{i}();
@@ -1030,6 +1085,25 @@ writematrix( Mot24 , fullfile(pth, [ pfxMot24   ,'_',nme, '.txt' ]), 'Delimiter'
 writematrix( AbsMot, fullfile(pth, [ pfxAbsMot  ,'_',nme, '.txt' ]), 'Delimiter', '\t' );
 writematrix( Fd    , fullfile(pth, [ pfxFd      ,'_',nme, '.txt' ]), 'Delimiter', '\t' );
 writematrix( Spk   , fullfile(pth, [ pfxSpikeFd ,'_',nme, '.txt' ]), 'Delimiter', '\t' );
+
+
+%%
+function xxStepFunc_Segment( Method, Img )
+
+if matches(lower(Method(1:3)),'spm')
+    shiSpmPreprocSegment(Img, true, 'overwrite');
+else
+    shiSpmCatSegment(Img, true, true, 'overwrite');
+end
+
+
+%%
+function xxStepFunc_Debone( Method, Tissue, Expr, Img, b )
+if matches(lower(Method),'c123')
+    shiSpmPreprocDebone(Img, Tissue(2:4), Expr, [], b, 'overwrite');
+else
+    shiSpmPreprocDebone(Img, Tissue{1}, Expr, [], b, 'overwrite');
+end
 
 
 %%
@@ -1166,8 +1240,9 @@ if allCensor
     warning('cannot censor all timepints.');
 end
 
+X_All = shiSpmRoiXtrMultilabel(Img,AtlasAll,[],AtlasLabAll,XtrSummFunc);
 for i = 1:length(AtlasAll)
-    X = shiSpmRoiXtrMultilabel(Img,AtlasAll{i},[],AtlasLabAll{i},XtrSummFunc);
+    X = X_All{i};
     Adj = CorrMethod(X);
     if noCensor
         Adj_censored = Adj;
@@ -1356,25 +1431,51 @@ end
 
 assert(numel(gzName)==numel(F))
 
+xxInd = true(length(F),1);
+
 for i = 1:length(F)
 
-    fprintf('(%3d/%d) - gzipping %s ...\n',i,length(F),F{i}{1});
-
     if isempty(F{i})
+        xxInd(i) = false;
         continue;
-    elseif ~all(cellfun(@(x)exist(x,'file'),F{i}))
+    end
+    
+    xxExist = cellfun(@(x)exist(x,'file'),F{i});
+    if ~any(xxExist)
+        xxInd(i) = false;
+        continue;
+    end
+
+    if ~all(xxExist)
         warning('incomplete file list %s', F{i}{1});
+        xxInd(i) = false;
         continue;
     end
     if exist(gzName{i},'file')
         warning('%s already exists',gzName{i});
+        xxInd(i) = false;
         continue;
     end
+
+end
+
+F = F(xxInd);
+gzName = gzName(xxInd);
+
+xxCnt = sum(xxInd);
+
+for i = 1:xxCnt
+
+    [~,xxF2,xxF3] = fileparts(F{i}{1});
+    [~,xxG2,xxG3] = fileparts(gzName{i});
+    fprintf(['(%',num2str(floor(log10(xxCnt)+1)),'d/%d) : gzipping %s -> %s (%d %s)\n'],i,xxCnt,[xxF2,xxF3],[xxG2,xxG3],length(F{i}),shiIf(length(F{i})>1,'files','file'));
 
     xximg16(F{i});
     tar(gzName{i},F{i});
     if exist(gzName{i},'file')
         cellfun(@delete,F{i})
+    else
+        error('cannot find %s',gzName{i});
     end
 
 end
@@ -1406,6 +1507,10 @@ for i = 1:length(f)
     assert(exist(f{i},'file'),sprintf('fail to convert %s (renamed to _tmp%s)',f{i},xt));
     delete(tmp);
 end
+
+function x = xxexistfilter(x)
+k = cellfun(@(x)exist(x,'file'),x)>0;
+x = x(k);
 
 
 %%

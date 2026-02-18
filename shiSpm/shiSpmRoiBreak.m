@@ -27,7 +27,7 @@ Y = spm_read_vols(V);
 
 [YL,nCluster] = spm_bwlabel(Y,Conn);
 
-ImgOut = shiStrConcat(pt2,filesep,nm,'_comp',1:nCluster,xt);
+ImgOut = fullfile(pt2,shiStrConcat(nm,'_comp',1:nCluster,xt));
 
 for i = 1:nCluster
     xV = V;

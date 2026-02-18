@@ -17,7 +17,7 @@ end
 
 Img = cellstr(char(Img));
 [pth,nme,ext] = shiFileParts(Img);
-outImg = shiStrConcat(pth,filesep,Prefix,nme,ext);
+outImg = fullfile(pth,shiStrConcat(Prefix,nme,ext));
 MeanImg = fullfile(pth{1},['Mean_',nme{1},ext{1}]);
 
 if ~exist('existAction','var') || isempty(existAction)

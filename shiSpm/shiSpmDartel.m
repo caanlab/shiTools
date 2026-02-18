@@ -8,7 +8,7 @@ rc2Img = cellstr(char(rc2Img));
 Seg8Mat = cellstr(char(Seg8Mat));
 
 [pth,nme,ext] = shiFileParts(c1Img);
-outImg = shiStrConcat(pth,filesep,'smw',nme,ext);
+outImg = fullfile(pth,shiStrConcat('smw',nme,ext));
 
 st = shiTime;
 if ~exist('TivCsvSaveName','var') || isempty(TivCsvSaveName)

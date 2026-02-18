@@ -2,25 +2,25 @@ function [FirstLabel,AllLabel] = shiSpmAnatLabel(AtlasName,Roi,Radius,SupressPri
  
 % returns the anatomical label of ROIs
 %
-% FirstLabel = shiSpmAnatLabel(   []    ,Roi)
 % FirstLabel = shiSpmAnatLabel(AtlasName,Roi)
 % FirstLabel = shiSpmAnatLabel(AtlasName,Roi,Radius)
 % FirstLabel = shiSpmAnatLabel(AtlasName,Roi,Radius,SupressPrint)
 % [FirstLabel,AllLabel] = shiSpmAnatLabel(AtlasName,Roi,Radius,SupressPrint)
 % [Atlas_nii,AtlasLabel_Txt] = shiSpmAnatLabel(AtlasName_inShiMisc)
 % 
-%   AtlasName - string, 'AAL', 'AALFullName', etc
-%   Roi       - see shiSpmRoiXtr
-%   Radius    - a positive number in millimeter, to specify the radius of
-%               spheric ROIs, but only when variable Roi contains 
-%               coordinates (default = 5)
-%   FirstLabel- Each row corresponds to an ROI, most likely label
-%   AllLabel  - Each row corresponds to an ROI. 1st columnis percentage of
-%               voxels, 2nd column is AAL labels, 3rd column is number of
-%               voxels in the atlas space
+%   AtlasName    - string, 'AAL', 'AALFullName', etc
+%   Roi          - see shiSpmRoiXtr
+%   Radius       - a positive number in millimeter, to specify the radius of
+%                  spheric ROIs, but only when variable Roi contains 
+%                  coordinates (default = 5)
+%   SupressPrint - do not print results (default = false)
+%   FirstLabel   - Each row corresponds to an ROI, most likely label
+%   AllLabel     - Each row corresponds to an ROI. 1st columnis percentage of
+%                  voxels, 2nd column is AAL labels, 3rd column is number of
+%                  voxels in the atlas space
 % 
 %    ###########
-% by Zhenhao Shi @ 2018-6-14
+% by Zhenhao Shi @ 2025-8-14
 %    ###########
 % 
 
@@ -34,6 +34,7 @@ cd(fullfile(shiTools,'shiMisc'));
 AtlasList = char(AtlasList);
 AtlasList = AtlasList(:,16:end);
 AtlasList = cellstr(AtlasList);
+AtlasList = AtlasList(~endsWith(AtlasList,'.dlabel'));
 
 cd(cwd);
 % 

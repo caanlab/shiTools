@@ -73,7 +73,7 @@ else
         ImgMasked = fullfile(pt,[Prefix,nme,xt]);
     else
         [pt,nme,xt] = shiFileParts(cellstr(char(ImgRaw)));
-        ImgMasked = shiStrConcat(pt,filesep,Prefix,nme,xt);
+        ImgMasked = fullfile(pt,shiStrConcat(Prefix,nme,xt));
     end
 end
 

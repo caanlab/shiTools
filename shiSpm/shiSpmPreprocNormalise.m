@@ -32,7 +32,7 @@ Img = cellstr(char(Img));
 ImgDeform_y = char(ImgDeform_y);
 
 [pth,nme,ext] = shiFileParts(Img);
-outImg = shiStrConcat(pth,filesep,Prefix,nme,ext);
+outImg = fullfile(pth,shiStrConcat(Prefix,nme,ext));
 
 if ~exist('existAction','var') || isempty(existAction)
     existAction = 'ask';
@@ -54,7 +54,7 @@ end
 
 if ~exist('VoxelSize','var') || isempty(VoxelSize)
     VoxelSize = [3 3 3];
-elseif numel(VoxelSize)==1
+elseif isscalar(VoxelSize)
     VoxelSize = [VoxelSize VoxelSize VoxelSize];
 end
 

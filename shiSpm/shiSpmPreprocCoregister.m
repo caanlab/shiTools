@@ -35,7 +35,7 @@ if doWrite
         Prefix = 'r';
     end
     [pth,nme,ext] = shiFileParts(Img);
-    outImg = shiStrConcat(pth,filesep,Prefix,nme,ext);
+    outImg = fullfile(pth,shiStrConcat(Prefix,nme,ext));
     if ~exist('existAction','var') || isempty(existAction)
         existAction = 'ask';
     elseif ~ismember(lower(existAction),{'ask','overwrite'})

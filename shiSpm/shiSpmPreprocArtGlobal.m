@@ -8,9 +8,13 @@ function [outImg,ArtGlobalRepairedTxt,ArtGlobalDeweightedTxt] = shiSpmPreprocArt
 % The program pops up a GUI with suggested scans to be repaired, and 
 % suggested scans to be deweighted during SPM Estimation.
 
+if ~exist('Prefix','var') || isempty(Prefix)
+    Prefix = 'g'; % default='g'
+end
+
 Img = cellstr(char(Img));
 [Pth,Nme,Ext] = shiFileParts(Img);
-outImg = shiStrConcat(Pth,filesep,Prefix,Nme,Ext);
+outImg = fullfile(Pth,shiStrConcat(Prefix,Nme,Ext));
 RpTxt = char(RpTxt);
 
 if ~exist('existAction','var') || isempty(existAction)
@@ -31,9 +35,6 @@ if exist(outImg{1},'file') && strcmpi(existAction,'ask')
 end
 
 
-if ~exist('Prefix','var') || isempty(Prefix)
-    Prefix = 'v'; % default='v'
-end
 
 HeadMaskType = 4; % = 1 for SPM mask, = 4 for Automask
 RepairType = 1;   % = 1 for ArtifactRepair alone (0.5 movement and add margin).

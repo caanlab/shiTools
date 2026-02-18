@@ -30,8 +30,8 @@ shiSpmImgCalc0(ImgMat(:),sprintf('var(X).*%d',n*k-1),Img_SStotal,true,1);
 
 %% MSR & MSC
 
-Img_mean1 = shiStrConcat(Dir,filesep,'mean1_',1:k,'.nii');
-Img_mean2 = shiStrConcat(Dir,filesep,'mean2_',1:n,'.nii');
+Img_mean1 = fullfile(Dir,shiStrConcat('mean1_',1:k,'.nii'));
+Img_mean2 = fullfile(Dir,shiStrConcat('mean2_',1:n,'.nii'));
 for kk = 1:k
     shiSpmImgCalc0(ImgMat(:,kk),'mean(X)',Img_mean1{kk},true,1);
 end

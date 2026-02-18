@@ -22,7 +22,7 @@ if ~exist('Flag','var') || isempty(Flag)
     Flag = [];
 end
 
-outImg = shiStrConcat(pth,filesep,Prefix,nme,ext);
+outImg = fullfile(pth,shiStrConcat(Prefix,nme,ext));
 
 if ~exist('existAction','var') || isempty(existAction)
     existAction = 'ask';

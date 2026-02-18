@@ -1,10 +1,13 @@
 function shiSpmPipe_RestPreproc_WrapperGen
+%
+% generates code for running resting-state data preprocessing pipeline
+% see shiSpmPipe_RestPreproc
+% Zhenhao Shi 6-2-2025
 
 xTr = spm_input('TR (sec)', 1, 'e', [], 1);
 while ~isscalar(xTr) || xTr<=0
     xTr = spm_input('[must be number >0] TR (sec)', '+0', 'e', [], 1);
 end
-
 
 %% <Step 1> Slice Timing
 
@@ -44,7 +47,6 @@ while doSETUP
     doSETUP = spm_input(' ', '+2', 'Next|Reset', [false,true]);
 
 end
-
 
 %% <Step 2> Realignment
 
@@ -99,17 +101,28 @@ while doSETUP
     do03_SkullStrip = spm_input('do Skull Stripping?', 2, 'Y|N', [true,false], 1);
     if ~do03_SkullStrip, doSETUP = spm_input(' ', '+2', 'Next|Reset', [false,true]); continue; end
 
-    % xDebone_Expr
-    % leave empty for default 'i1+i2+i3>0.5' (FSL), or specify 'i1+i2>0.2' (SPM), or specify custom expression (see shiSpmPreprocSkullStrip)
-    MSG = 'non-skull mask definition';
-    xDebone_Expr = spm_input(MSG, [], 'm', 'GM + WM + CSF > 0.5 (FSL)|GM + WM > 0.2 (SPM)|enter expression', [1,2,3], 1);
-    switch xDebone_Expr
-        case 1, xDebone_Expr = 'i1+i2+i3>0.5';
-        case 2, xDebone_Expr = 'i1+i2>0.2';
-        case 3, xDebone_Expr = strrep(strrep(strrep(lower(spm_input(MSG, '+0', 'e', [], 1)),'gm','i1'),'wm','i2'),'csf','i3');
-        otherwise, xDebone_Expr = [];
+    % xSegment_Method
+    % % leave empty for default 'cat' (CAT12), or specify 'spm' (SPM12/SPM25)
+    MSG = 'segmentation';
+    xSegment_Method = spm_input(MSG, [], 'CAT12|SPM', [1,2], 1);
+    switch xSegment_Method
+        case 1, xSegment_Method = 'cat';
+        case 2, xSegment_Method = 'spm';
+        otherwise, xSegment_Method = [];
     end
-    spm_input(MSG, [], 'b', {xDebone_Expr});
+
+    % xDebone_Expr, xDebone_Method
+    % leave empty for 'i1+i2+i3>0.5' (FSL, default for 'c123') and 'i1>0' (default for 'c0'), or specify 'i1+i2>0.2' (SPM, for 'c123'), or specify custom expression (see shiSpmPreprocDebone)
+    MSG = 'non-skull mask definition';
+    xDebone_Expr = spm_input(MSG, [], 'm', 'use PVE map|GM + WM + CSF > 0.5 (FSL)|GM + WM > 0.2 (SPM)|enter expression', [1,2,3,4], 1);
+    switch xDebone_Expr
+        case 1, xDebone_Method = 'c0'; xDebone_Expr = 'i1>0';
+        case 2, xDebone_Method = 'c123'; xDebone_Expr = 'i1+i2+i3>0.5';
+        case 3, xDebone_Method = 'c123'; xDebone_Expr = 'i1+i2>0.2';
+        case 4, xDebone_Method = 'c123'; xDebone_Expr = strrep(strrep(strrep(lower(spm_input(MSG, '+0', 'e', [], 1)),'gm','i1'),'wm','i2'),'csf','i3');
+        otherwise, xDebone_Method = []; xDebone_Expr = [];
+    end
+    spm_input(MSG, [], 'b', {[xDebone_Method,': ',xDebone_Expr]});
 
     doSETUP = spm_input(' ', '+2', 'Next|Reset', [false,true]);
 
@@ -366,9 +379,9 @@ while doSETUP
 
 end
 
-%% <Final Step> Adjacency Matrix
+%% <Step 11> Adjacency Matrix
 
-spm_input('<Final Step> Adjacency Matrix', 1, 'd');
+spm_input('<Step 11> Adjacency Matrix', 1, 'd');
 
 if ~do08_RegressOut
     doSETUP = false;
@@ -401,16 +414,31 @@ while doSETUP
     end
 
     atlas_ALL = 'AAL|AAL_90|AAL3|AAL3_140|HCPMMP|HOA|Power264|Neuromorphometrics_Brain|Schaefer1000Parcel07Net|Schaefer1000Parcel17Net|Yeo7NetLiberal|Yeo17NetLiberal|all';
-    atlas = spm_input('choose atlas', [], 'm', atlas_ALL, 1:13, 13);
+    atlas = spm_input('choose atlas', [], 'm', atlas_ALL, 1:length(strfind(atlas_ALL,'|'))+1, length(strfind(atlas_ALL,'|'))+1);
     atlas_ALL = split(atlas_ALL,'|');
     atlas = atlas_ALL(atlas);
-    if isequal(atlas,'all')
-        atlas = atlas_ALL; %#ok<NASGU>
+    if isequal(atlas,{'all'})
+        atlas = atlas_ALL(1:end-1); %#ok<NASGU>
     end
 
     doSETUP = spm_input(' ', '+2', 'Next|Reset', [false,true]);
 
 end
+
+%% <Complete> Zipping
+
+spm_input('<Complete> Zipping', 1, 'd');
+
+doSETUP = true;
+
+while doSETUP
+
+    doXX_Zip = spm_input('do Zipping?', 2, 'Y|N', [true,false], 1);
+
+    doSETUP = spm_input(' ', '+2', 'Done|Reset', [false,true]);
+
+end
+
 
 %% ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 %% ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -453,6 +481,11 @@ for i = 1:length(FIN)
     [xStepInd{i},xStepInd_letter{i},xStepInd_detail{i}] = shipipe_get_steps(FIN{i});
 end
 xStepInd = cat(1,xStepInd{:});
+if doXX_Zip
+    xStepInd = [xStepInd;169;170;171];
+    xStepInd_letter = [xStepInd_letter;{'Y';'Y';'Y'}];
+    xStepInd_detail = [xStepInd_detail;{'tar';'tar';'tar'}];
+end
 xStepInd_letter = cat(1,xStepInd_letter{:});
 xStepInd_detail = cat(1,xStepInd_detail{:});
 [xStepInd, idx] = unique(xStepInd);
@@ -479,6 +512,8 @@ try xPARAM.xNormalize_VoxelSize   = xNormalize_VoxelSize   ; catch, warning('uns
 try xPARAM.xMotion_AbsMotOption   = xMotion_AbsMotOption   ; catch, warning('unspecified parameter: %s', 'xMotion_AbsMotOption  '); xPARAM.xMotion_AbsMotOption   = []; end
 try xPARAM.xMotion_FdOption       = xMotion_FdOption       ; catch, warning('unspecified parameter: %s', 'xMotion_FdOption      '); xPARAM.xMotion_FdOption       = []; end
 try xPARAM.xMotion_FdSpikeThres   = xMotion_FdSpikeThres   ; catch, warning('unspecified parameter: %s', 'xMotion_FdSpikeThres  '); xPARAM.xMotion_FdSpikeThres   = []; end
+try xPARAM.xSegment_Method        = xSegment_Method        ; catch, warning('unspecified parameter: %s', 'xSegment_Method       '); xPARAM.xSegment_Method        = []; end
+try xPARAM.xDebone_Method         = xDebone_Method         ; catch, warning('unspecified parameter: %s', 'xDebone_Method        '); xPARAM.xDebone_Method         = []; end
 try xPARAM.xDebone_Expr           = xDebone_Expr           ; catch, warning('unspecified parameter: %s', 'xDebone_Expr          '); xPARAM.xDebone_Expr           = []; end
 try xPARAM.xErode_Keep            = xErode_Keep            ; catch, warning('unspecified parameter: %s', 'xErode_Keep           '); xPARAM.xErode_Keep            = []; end
 try xPARAM.xDvars_SpikeThres      = xDvars_SpikeThres      ; catch, warning('unspecified parameter: %s', 'xDvars_SpikeThres     '); xPARAM.xDvars_SpikeThres      = []; end
@@ -492,29 +527,92 @@ try xPARAM.xAdjMat_CorrMethod     = xAdjMat_CorrMethod     ; catch, warning('uns
 
 matlab.io.saveVariablesToScript(WRAP, {'xStepInd','atlas','xPARAM'});
 
-WRAP_VAR = shiTxtRead(WRAP);
+WRAP_TXT0 = [
+    {'anat = ;'}
+    {''}
+    {'func = ;'}
+    {''}
+    {'CustomCov = []; % optional'}
+    {'CustomSpike = []; % optional'}
+    {''}
+    {'%%'}
+    ];
 
-WRAP_TXT0 = {
-    'anat = ;'
-    ''
-    'func = ;'
-    ''
-    'CustomCov = []; % optional'
-    'CustomSpike = []; % optional'
-    ''
-    };
+WRAP_TXT1 = shiTxtRead(WRAP);
 
 WRAP_TXT2 = [
     {''}
     shiStrConcat('%', shiSpace, cellstr(num2str(xStepInd,'[%d]')), shiSpace, '[', xStepInd_letter, ']', shiSpace, xStepInd_detail)
     {''}
+    {'spm(''defaults'',''fmri'');'}
+    {'spm_jobman(''initcfg'');'}
+    {'spm_get_defaults(''cmdline'',true);'}
+    {'cat_get_defaults(''extopts.print'',0);'}
+    {''}
     ];
 
-WRAP_TXT3 = {
-    'shiSpmPipe_RestPreproc(xStepInd,anat,func,atlas,CustomCov,CustomSpike,xPARAM);'
-    };
+WRAP_TXT3 = [
+    {'shiSpmPipe_RestPreproc(xStepInd,anat,func,atlas,CustomCov,CustomSpike,xPARAM);'}
+    {''}
+    ];
 
-WRAP_ALL = [WRAP_TXT0; WRAP_VAR; WRAP_TXT2; WRAP_TXT3];
+WRAP_TXT4 = [
+    {'% Output file naming:'}
+    {'%     a*              :  slice time corrected image'}
+    {'%     atlas*          :  atlas file'}
+    {'%     b*              :  skull stripped image'}
+    {'%     c0*             :  partial volume label image (equivalent to p0*.nii from CAT12)'}
+    {'%     c1*             :  gray matter segmentation'}
+    {'%     c2*             :  white matter segmentation'}
+    {'%     c3*             :  CSF segmentation'}
+    {'%     d*              :  detrended image'}
+    {'%     ec1*            :  eroded gray matter segmentation'}
+    {'%     ec2*            :  eroded white matter segmentation'}
+    {'%     ec3*            :  eroded CSF segmentation'}
+    {'%     f*              :  band-pass filtered image'}
+    {'%     iy*             :  inverse deformation field '}
+    {'%     k*              :  voxel-wise despiked image'}
+    {'%     l*              :  volume-wise interpolated image'}
+    {'%     *label          :  atlas region labels'}
+    {'%     m*              :  modulated image'}
+    {'%     r*              :  realigned (functional) or DARTEL import (structural) image'}
+    {'%     s4*             :  spatially smoothed image (FWHM = 4 mm)'}
+    {'%     s8*             :  spatially smoothed image (FWHM = 8 mm)'}
+    {'%     seg8*           :  segmentation parameters'}
+    {'%     u*              :  unwarped image (from MNI to native)'}
+    {'%     v2*             :  covariate adjusted image (24 motion parameters, white matter signal, CSF signal, customized covariates if any)'}
+    {'%     v3*             :  covariate adjusted image (24 motion parameters, white matter signal, CSF signal, whole-brain signal, customized covariates if any)'}
+    {'%     w*              :  normalized image'}
+    {'%     wj*             :  Jacobian determinant image'}
+    {'%     y*              :  forward deformation field'}
+    {'%     AbsMot*         :  absolute head motion parameter'}
+    {'%     Adj*            :  adjacency matrix and other data'}
+    {'%     BiasField*      :  bias field image'}
+    {'%     CatMat*         :  CAT12 output report .mat file'}
+    {'%     CatXml*         :  CAT12 output report .xml file'}
+    {'%     CatReport*      :  CAT12 output report .pdf file'}
+    {'%     CatIqr*         :  CAT12 output image quality'}
+    {'%     CatTiv*         :  CAT12 output tissue volumes'}
+    {'%     Censor*         :  temporal censoring vector (i.e. all volume-wise spikes combined)'}
+    {'%     Dvars*          :  DVARS'}
+    {'%     Fd*             :  framewise displacement'}
+    {'%     MaskDebone*     :  mask image for skull stripping'}
+    {'%     Mean*           :  mean image'}
+    {'%     Mot24*          :  24 motion parameters'}
+    {'%     Nui2*           :  white matter and CSF signals'}
+    {'%     Nui3*           :  white matter, CSF, and whole-brain signals'}
+    {'%     PreprocSumm*    :  preprocessing summary for quality control'}
+    {'%     Resliced*       :  resliced image'}
+    {'%     Rp*             :  realignment parameters (i.e. 6 raw motion parameters)'}
+    {'%     Spike*          :  volume-wise spikes'}
+    {'%     SpikeDvars*     :  volume-wise spikes from DVARS'}
+    {'%     SpikeFd*        :  volume-wise spikes from framewise displacement'}
+    {'%     Spm*            :  SPM.mat file from covariate adjustment'}
+    {'%     TisDep*         :  tissue depth image'}
+    {'%     TisLab*         :  tissule label image'}
+    ];
+
+WRAP_ALL = [WRAP_TXT0; WRAP_TXT1; WRAP_TXT2; WRAP_TXT3; WRAP_TXT4];
 
 fid = fopen(WRAP,'w');
 fprintf(fid, '%s\n', WRAP_ALL{:});
@@ -538,8 +636,8 @@ function [FIN_req,FIN_req_letter,FIN_req_detail] = shipipe_get_steps(FIN)
     2,    'B',  'calculating motion parameters and motion-spikes',        {'Rp_func1'},                                                                                                                                                                                                                                              {'Mot24_Rp_func1', 'AbsMot_Rp_func1', 'Fd_Rp_func1', 'SpikeFd_Rp_func1'};
     3,    'C',  'slice timing',                                           {'FUNC'},                                                                                                                                                                                                                                                  {'afunc'};
     4,    'D',  'realignment',                                            {'afunc'},                                                                                                                                                                                                                                                 {'rafunc', 'Mean_afunc1'};
-    5,    'E',  'coregistration and segmentation',                        {'ANAT', 'Mean_afunc1'},                                                                                                                                                                                                                                   {'y_anat', 'iy_anat', 'c1anat', 'c2anat', 'c3anat', 'manat'};
-    6,    'G',  'skull stripping',                                        {'rafunc', 'c1anat', 'c2anat', 'c3anat'},                                                                                                                                                                                                                  {'brafunc', 'MaskDebone_rafunc1'};
+    5,    'E',  'coregistration and segmentation',                        {'ANAT', 'Mean_afunc1'},                                                                                                                                                                                                                                   {'y_anat', 'iy_anat', 'c0anat', 'c1anat', 'c2anat', 'c3anat'};
+    6,    'G',  'skull stripping',                                        {'c0anat', 'c1anat', 'c2anat', 'c3anat', 'rafunc'},                                                                                                                                                                                                        {'brafunc', 'MaskDebone_rafunc1'};
     7,    'U',  'reslicing tissue maps',                                  {'brafunc', 'c1anat', 'c2anat', 'c3anat'},                                                                                                                                                                                                                 {'Resliced_c1anat', 'Resliced_c2anat', 'Resliced_c3anat'};
     8,    'V',  'calculating tissue depth',                               {'Resliced_c1anat', 'Resliced_c2anat', 'Resliced_c3anat'},                                                                                                                                                                                                 {'TisDep_Resliced_c1anat'};
     9,    'F',  'tissue eroding',                                         {'TisDep_Resliced_c1anat'},                                                                                                                                                                                                                                {'ec2_TisDep_Resliced_c1anat', 'ec3_TisDep_Resliced_c1anat'};
@@ -660,7 +758,7 @@ function [FIN_req,FIN_req_letter,FIN_req_detail] = shipipe_get_steps(FIN)
     124,  'R',  'normalization',                                          {'v3ldbrafunc', 'y_anat'},                                                                                                                                                                                                                                 {'wv3ldbrafunc'};
     125,  'R',  'normalization',                                          {'v3dkbrafunc', 'y_anat'},                                                                                                                                                                                                                                 {'wv3dkbrafunc'};
     126,  'R',  'normalization',                                          {'v3dbrafunc', 'y_anat'},                                                                                                                                                                                                                                  {'wv3dbrafunc'};
-    127,  'R',  'normalization of structural images',                     {'ANAT', 'manat', 'y_anat'},                                                                                                                                                                                                                               {'wanat', 'wmanat'};
+    127,  'R',  'normalization of structural images',                     {'ANAT', 'y_anat'},                                                                                                                                                                                                                                        {'wanat'};
     128,  'S',  'unwarping atlas',                                        {'ATLAS', 'iy_anat'},                                                                                                                                                                                                                                      {'uatlas'};
     129,  'T',  'calculating adjacency matrix',                           {'v2fldkbrafunc', 'uatlas', 'ATLAS_LABEL', 'Censor_brafunc1', 'Adj_v2fldkbrafunc1_uatlas'},                                                                                                                                                                {'Adj_v2fldkbrafunc1_uatlas'};
     130,  'T',  'calculating adjacency matrix',                           {'v2fldbrafunc', 'uatlas', 'ATLAS_LABEL', 'Censor_brafunc1', 'Adj_v2fldbrafunc1_uatlas'},                                                                                                                                                                  {'Adj_v2fldbrafunc1_uatlas'};
@@ -702,6 +800,9 @@ function [FIN_req,FIN_req_letter,FIN_req_detail] = shipipe_get_steps(FIN)
     166,  'X',  'summary',                                                {'TisDep_Resliced_c1anat', 'dbrafunc', 'v3ldbrafunc', 'AbsMot_Rp_func1', 'Fd_Rp_func1', 'Dvars_brafunc1', 'Dvars_v3ldbrafunc1', 'CUSTOMCOV', 'v3Spm_ldbrafunc1', 'SpikeFd_Rp_func1', 'SpikeDvars_brafunc1', 'CUSTOMSPIKE', 'Censor_brafunc1'},             {'PreprocSumm_v3ldbrafunc1'};
     167,  'X',  'summary',                                                {'TisDep_Resliced_c1anat', 'dkbrafunc', 'v3dkbrafunc', 'AbsMot_Rp_func1', 'Fd_Rp_func1', 'Dvars_brafunc1', 'Dvars_v3dkbrafunc1', 'CUSTOMCOV', 'v3Spm_dkbrafunc1', 'SpikeFd_Rp_func1', 'SpikeDvars_brafunc1', 'CUSTOMSPIKE', 'Censor_brafunc1'},            {'PreprocSumm_v3dkbrafunc1'};
     168,  'X',  'summary',                                                {'TisDep_Resliced_c1anat', 'dbrafunc', 'v3dbrafunc', 'AbsMot_Rp_func1', 'Fd_Rp_func1', 'Dvars_brafunc1', 'Dvars_v3dbrafunc1', 'CUSTOMCOV', 'v3Spm_dbrafunc1', 'SpikeFd_Rp_func1', 'SpikeDvars_brafunc1', 'CUSTOMSPIKE', 'Censor_brafunc1'},                {'PreprocSumm_v3dbrafunc1'};
+    169,  'Y',  'tar',                                                    {},                                                                                                                                                                                                                                                        {};
+    170,  'Y',  'tar',                                                    {},                                                                                                                                                                                                                                                        {};
+    171,  'Y',  'tar',                                                    {},                                                                                                                                                                                                                                                        {};
     });
 
 assert(isequal(cell2mat(NUM),(1:length(NUM))'));

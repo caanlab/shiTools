@@ -14,31 +14,10 @@ function Yf = shiSpmFilter(Y,HighPassPeriod,TR,WindowLength)
 %                     and WindowLength should be given as [150,150].
 %   Yf              - filtered time series or 'filtered_*.img' files
 % 
-% requires
-%   SPM 8
-%   shiSpmImgCalc
-% 
 %    ###########
-% by Zhenhao Shi @ 2015-2-12
+% by Zhenhao Shi @ 2025-9-25
 %    ###########
 % 
-
-if isnumeric(Y)
-    if length(size(Y))~=2 || min(size(Y)) ~=1
-        error('Y must be a 1-D vector');
-    end
-else
-    Y = cellstr(char(Y));
-    for i = 1:length(Y)
-        yyy = shiFullFileName(Y{i});
-        Y{i} = yyy{1};
-        [xpath,xname,xext] = fileparts(Y{i});
-        Yf{i,1} = fullfile(xpath,['filtered_',xname,xext]);
-    end;
-    Script = ['Output = shiSpmFilter(Input,',num2str(HighPassPeriod),',',num2str(TR),');'];
-    shiSpmImgCalc2(Y,Script,Yf);
-    return;
-end
 
 Y = Y(:);
 
@@ -53,11 +32,31 @@ end
 
 WindowLength = WindowLength(WindowLength~=0);
 
+if isnumeric(Y)
+    if length(size(Y))~=2 || min(size(Y)) ~=1
+        error('Y must be a 1-D vector');
+    end
+else
+    Y = cellstr(char(Y));
+    Yf = cell(size(Y));
+    for i = 1:length(Y)
+        yyy = shiFullFileName(Y{i});
+        Y{i} = yyy{1};
+        [xpath,xname,xext] = fileparts(Y{i});
+        Yf{i,1} = fullfile(xpath,['filtered_',xname,xext]);
+    end
+    % Script = ['Output = shiSpmFilter(Input,',num2str(HighPassPeriod),',',num2str(TR),');'];
+    % shiSpmImgCalc2(Y,Script,Yf);
+    FUNC = @(x)shiSpmFilter(x,HighPassPeriod,TR,WindowLength);
+    shiSpmImgCalc(Y,FUNC,Yf);
+    return;
+end
+
 for i = 1:numel(WindowLength)
     K(i).RT = TR;
     K(i).row = sum(WindowLength(1:i-1))+1:sum(WindowLength(1:i));
     K(i).HParam = HighPassPeriod;
-end;
+end
 
 K = spm_filter(K);
 

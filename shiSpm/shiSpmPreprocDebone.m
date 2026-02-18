@@ -1,26 +1,35 @@
-function [outImg,mskImg] = shiSpmPreprocSkullStrip(Img,c1Img,c2Img,c3Img,Expr,FillHole,Prefix,existAction)
+function [outImg,mskImg] = shiSpmPreprocDebone(Img,Tissue,Expr,FillHole,Prefix,existAction)
 
-% (obsolete - use shiSpmPreprocDebone) performs skull stripping by applying tissue masks to functional images
+% performs skull stripping by applying a tissue-based mask to functional images
 %
-% [outImg,mskImg] = shiSpmPreprocSkullStrip(Img,c1Img,c2Img,c3Img)
-% [outImg,mskImg] = shiSpmPreprocSkullStrip(Img,c1Img,c2Img,c3Img,Expr)
-% [outImg,mskImg] = shiSpmPreprocSkullStrip(Img,c1Img,c2Img,c3Img,Expr,FillHole)
-% [outImg,mskImg] = shiSpmPreprocSkullStrip(Img,c1Img,c2Img,c3Img,Expr,FillHole,Prefix)
+% [outImg,mskImg] = shiSpmPreprocDebone(Img, {c1Img;c2Img;c3Img}, ...)
+% [outImg,mskImg] = shiSpmPreprocDebone(Img, c0Img, ...)
+% [outImg,mskImg] = shiSpmPreprocSkullStrip(Img, Mask, ...)
 %
 % Img - raw functional images
-% c1Img, c2Img, c3Img - c1, c2 and c3 images from segmentation
-% Expr - expression applied to c1, c2 and c3 images
-%         e.g. 'i1+i2>0.2', for c1+c2>0.2 (SPM)
-%              'i1+i2+i3>0.5', for c1+c2+c3>0.5 (FSL) (default)
+% c0Img, c1Img, c2Img, c3Img - PVE, c1, c2 and c3 images from segmentation
+% Expr - expression applied to c0/mask image (e.g., 'i1>0' (default))
+%        or, expression for c1, c2 and c3 images
+%        e.g. 'i1+i2>0.2', for c1+c2>0.2 (SPM)
+%             'i1+i2+i3>0.5', for c1+c2+c3>0.5 (FSL) (default)
 % FillHole - filling holes in the mask (def = true)
 % Prefix - default: 'b'
 % outImg - skull stripped functional images
 % mskImg - mask used for skull stripping (MaskDebone_*.nii)
 %
-% Zhenhao Shi 2019/12/10
+% Zhenhao Shi 2025-5-16
 
 [pth,nme,ext] = fileparts(Img{1});
 xout = fullfile(pth,[Prefix,nme,ext]);
+
+Tissue = cellstr(char(Tissue));
+if length(Tissue) == 3
+    Method = 'c123';
+elseif isscalar(Tissue)
+    Method = 'c0';
+else
+    error('second input must be either c1,c2,c3 images or one c0/mask image');
+end
 
 if ~exist('existAction','var') || isempty(existAction)
     existAction = 'ask';
@@ -42,9 +51,6 @@ end
 
 Img = cellstr(char(Img));
 [pth,nme,ext] = fileparts(Img{1});
-c1Img = cellstr(char(c1Img));
-c2Img = cellstr(char(c2Img));
-c3Img = cellstr(char(c3Img));
 mskImg = fullfile(pth,['MaskDebone_',nme,ext]);
 
 if ~exist('Prefix','var') || isempty(Prefix)
@@ -52,14 +58,19 @@ if ~exist('Prefix','var') || isempty(Prefix)
 end
 
 if ~exist('FillHole','var') || isempty(FillHole)
-    FillHole = True;
+    FillHole = true;
 end
 
 if ~exist('Expr','var') || isempty(Expr)
-    Expr = 'i1+i2+i3>0.5';
+    switch Method
+        case 'c123'
+            Expr = 'i1+i2+i3>0.5';
+        case 'c0'
+            Expr = 'i1>0';
+    end
 end
 
-shiSpmImgCalc0([c1Img;c2Img;c3Img],Expr,mskImg);
+shiSpmImgCalc0(Tissue,Expr,mskImg);
 
 if FillHole
     V = spm_vol(mskImg);

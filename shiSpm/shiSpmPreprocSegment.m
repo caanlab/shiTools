@@ -8,7 +8,7 @@ function [outImg_y,outImg_iy,outImg_SaveMore,matlabbatch] = shiSpmPreprocSegment
 %   outImg_y      - deformation field image (native --> MNI)
 %   outImg_iy     - deformation field image (native <-- MNI)
 %
-% Zhenhao Shi, 2019-10-30
+% Zhenhao Shi, 2025-5-28
 %
 
 Img = char(Img);
@@ -47,19 +47,20 @@ end
 if SaveMore
     outImg_SaveMore = struct(...
         'BiasField',fullfile(pth,['BiasField_',nme,ext]), ...
-        'm'    , fullfile(pth,['m'    ,nme,ext]), ...
-        'c1'   , fullfile(pth,['c1'   ,nme,ext]), ...
-        'rc1'  , fullfile(pth,['rc1'  ,nme,ext]), ...
-        'wc1'  , fullfile(pth,['wc1'  ,nme,ext]), ...
-        'mwc1' , fullfile(pth,['mwc1' ,nme,ext]), ...
-        'c2'   , fullfile(pth,['c2'   ,nme,ext]), ...
-        'rc2'  , fullfile(pth,['rc2'  ,nme,ext]), ...
-        'wc2'  , fullfile(pth,['wc2'  ,nme,ext]), ...
-        'mwc2' , fullfile(pth,['mwc2' ,nme,ext]), ...
-        'c3'   , fullfile(pth,['c3'   ,nme,ext]), ...
-        'rc3'  , fullfile(pth,['rc3'  ,nme,ext]), ...
-        'wc3'  , fullfile(pth,['wc3'  ,nme,ext]), ...
-        'mwc3' , fullfile(pth,['mwc3' ,nme,ext]) ...
+        'm'    , fullfile(pth,['m'    ,nme,ext]), ... % T1 modulated
+        'c0'   , fullfile(pth,['c0'   ,nme,ext]), ... % PVE map
+        'c1'   , fullfile(pth,['c1'   ,nme,ext]), ... % tissue
+        'rc1'  , fullfile(pth,['rc1'  ,nme,ext]), ... % tissue - DARTEL import
+        'wc1'  , fullfile(pth,['wc1'  ,nme,ext]), ... % tissue - DARTEL import - normalized
+        'mwc1' , fullfile(pth,['mwc1' ,nme,ext]), ... % tissue - DARTEL import - normalized - modulated
+        'c2'   , fullfile(pth,['c2'   ,nme,ext]), ... %
+        'rc2'  , fullfile(pth,['rc2'  ,nme,ext]), ... %
+        'wc2'  , fullfile(pth,['wc2'  ,nme,ext]), ... %
+        'mwc2' , fullfile(pth,['mwc2' ,nme,ext]), ... %
+        'c3'   , fullfile(pth,['c3'   ,nme,ext]), ... %
+        'rc3'  , fullfile(pth,['rc3'  ,nme,ext]), ... %
+        'wc3'  , fullfile(pth,['wc3'  ,nme,ext]), ... %
+        'mwc3' , fullfile(pth,['mwc3' ,nme,ext])  ... %
         );
 else
     outImg_SaveMore = '';
@@ -108,3 +109,22 @@ matlabbatch{1}.spm.spatial.preproc.warp.samp = 3;
 matlabbatch{1}.spm.spatial.preproc.warp.write = [1 1];
 
 spm_jobman('serial',matlabbatch);
+
+if SaveMore
+    V1 = spm_vol(outImg_SaveMore.c1);
+    V2 = spm_vol(outImg_SaveMore.c2);
+    V3 = spm_vol(outImg_SaveMore.c3);
+    Y1 = spm_read_vols(V1);
+    Y2 = spm_read_vols(V2);
+    Y3 = spm_read_vols(V3);
+    Yall = cat(4,Y3,Y1,Y2);
+    [~,Y0] = max(Yall,[],4);
+    Ymask = imfill(1.*(Y1+Y2+Y3>0.5),'holes');
+    Y0 = Y0.*Ymask;
+    V0 = V1;
+    V0.fname = fullfile(pth,['c0'   ,nme,ext]);
+    V0.pinfo = [1;0;0];
+    V0.dt = [2,0];
+    spm_write_vol(V0,Y0);
+end
+

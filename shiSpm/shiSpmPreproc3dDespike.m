@@ -33,7 +33,7 @@ if ~exist('cOrder','var') || isempty(cOrder)
     cOrder = round(length(Img)/30);
 end
 
-outImg = shiStrConcat(pth,filesep,Prefix,nme,ext);
+outImg = fullfile(pth,shiStrConcat(Prefix,nme,ext));
 
 if ~exist('existAction','var') || isempty(existAction)
     existAction = 'ask';
@@ -126,7 +126,7 @@ while i1 <= size(Y,2)
     i2 = min(size(Y,2),i2 + sz_chk);
 
 %     fprintf('\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%5.1f%%',cnt/n_chk*100);
-    fprintf('\b\b\b\b\b\b%5.1f%%',cnt/n_chk*100);
+    fprintf('\b\b\b\b\b\b\b%5.1f%%',cnt/n_chk*100);
     
 end
 

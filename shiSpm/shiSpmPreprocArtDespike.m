@@ -26,7 +26,7 @@ if ~exist('Thres','var') || isempty(Thres)
     Thres = 4;
 end
 
-outImg = shiStrConcat(pth,filesep,Prefix,nme,ext);
+outImg = fullfile(pth,shiStrConcat(Prefix,nme,ext));
 
 if ~exist('existAction','var') || isempty(existAction)
     existAction = 'ask';

@@ -20,7 +20,7 @@ if ~exist('Prefix','var') || isempty(Prefix)
 end
 
 [pth,nme,ext] = shiFileParts(Img);
-outImg = shiStrConcat(pth,filesep,Prefix,nme,ext);
+outImg = fullfile(pth,shiStrConcat(Prefix,nme,ext));
 
 if ~exist('existAction','var') || isempty(existAction)
     existAction = 'ask';
@@ -39,11 +39,11 @@ if exist(outImg{end},'file') && strcmpi(existAction,'ask')
     end
 end
 
-outMeanImg_old = char(shiStrConcat(pth{1},filesep,'mean',nme{1},ext{1}));
-outMeanImg = char(shiStrConcat(pth{1},filesep,'Mean_',nme{1},ext{1}));
-outRpTxt_old = char(shiStrConcat(pth{1},filesep,'rp_',nme{1},'.txt'));
-outRpTxt_old2 = char(shiStrConcat(pth{1},filesep,'rp2_',nme{1},'.txt'));
-outRpTxt = char(shiStrConcat(pth{1},filesep,'Rp_',nme{1},'.txt'));
+outMeanImg_old = char(fullfile(pth{1},shiStrConcat('mean',nme{1},ext{1})));
+outMeanImg     = char(fullfile(pth{1},shiStrConcat('Mean_',nme{1},ext{1})));
+outRpTxt_old   = char(fullfile(pth{1},shiStrConcat('rp_',nme{1},'.txt')));
+outRpTxt_old2  = char(fullfile(pth{1},shiStrConcat('rp2_',nme{1},'.txt')));
+outRpTxt       = char(fullfile(pth{1},shiStrConcat('Rp_',nme{1},'.txt')));
 
 %-----------------------------------------------------------------------
 % Job saved on 30-Oct-2019 14:04:10 by cfg_util (rev $Rev: 7345 $)

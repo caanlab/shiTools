@@ -36,7 +36,7 @@ end
 
 Img = cellstr(char(Img));
 [pth,nme,ext] = shiFileParts(Img);
-outImg = shiStrConcat(pth,filesep,Prefix,nme,ext);
+outImg = fullfile(pth,shiStrConcat(Prefix,nme,ext));
 DirReg = shiMkdir(fullfile(pth{1},[Prefix,nme{1},'_RegressingOut']));
 
 if ~exist('existAction','var') || isempty(existAction)
@@ -104,7 +104,7 @@ spm_jobman('serial',matlabbatch);
 save(fullfile(DirReg,'SPM.mat'),'CovData','CovTxt','CovRoi','-append');
 
 fprintf('moving and renaming residual files... \n');
-ImgResid = shiStrConcat(DirReg,filesep,'Res_',cellstr(reshape(sprintf('%04d',1:length(outImg)),4,[])'),'.nii');
+ImgResid = fullfile(DirReg,shiStrConcat('Res_',cellstr(reshape(sprintf('%04d',1:length(outImg)),4,[])'),'.nii'));
 SpmMat = fullfile(DirReg,'SPM.mat');
 for i = 1:length(outImg)
     movefile(ImgResid{i},outImg{i});

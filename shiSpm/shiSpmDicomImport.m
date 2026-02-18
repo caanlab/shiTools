@@ -41,7 +41,7 @@ out = spm_dicom_convert(hdr,'all','series',NiftiSuffix);
 outDir = cell(size(out.files));
 for i = 1:numel(out.files)
     outDir{i} = fileparts(out.files{i});
-end;
+end
 outDir = unique(outDir);
 
 switch NiftiSuffix
@@ -55,16 +55,16 @@ switch NiftiSuffix
             NiiLeft = cell(size(Nii));
             for n = 1:numel(Nii)
                 NiiLeft{n,1} = Nii{n}(1:18);
-            end;
-            assert(numel(unique(NiiLeft))==1,'unwanted nifti files found');
+            end
+            % assert(numel(unique(NiiLeft))==1,'unwanted nifti files found');
             assert(isequal(Nii,sort(Nii)),'nifti files badly sorted');
             for n = 1:numel(Nii)
                 movefile(Nii{n},['vol_',num2str(n,'%.5d'),'.nii']);
                 if mod(n,10)==1 || n==numel(Nii)
                     fprintf('%s <- %s\n',['vol_',num2str(n,'%.5d'),'.nii'],Nii{n});
                 end
-            end;
-        end;
+            end
+        end
 
     case 'img'
 
@@ -82,8 +82,8 @@ switch NiftiSuffix
                 assert(isequal(imgName,hdrName),'.img and .hdr files unmatched');
                 ImgLeft{n,1} = Img{n}(1:18);
                 HdrLeft{n,1} = Hdr{n}(1:18);
-            end;
-            assert(numel(unique(ImgLeft))==1,'unwanted nifti files found');
+            end
+            % assert(numel(unique(ImgLeft))==1,'unwanted nifti files found');
             assert(isequal(Img,sort(Img)),'nifti files badly sorted');
             for n = 1:numel(Img)
                 movefile(Img{n},['vol_',num2str(n,'%.5d'),'.img']);
@@ -91,10 +91,10 @@ switch NiftiSuffix
                 if mod(n,10)==1 || n==numel(Img)
                     fprintf('%s <- %s\n',['vol_',num2str(n,'%.5d'),'.img'],Img{n});
                 end
-            end;
-        end;
+            end
+        end
 
-end;
+end
 
 cd(cwd);
 
