@@ -2,7 +2,7 @@ function OUT = shiTools(STR)
 %
 % summarizes shiTools functions
 %
-% 2025.4.7
+% 2026.2.18
 
 
 if nargin == 0
